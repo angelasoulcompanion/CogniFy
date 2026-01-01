@@ -48,6 +48,7 @@ class ChatRequest(BaseModel):
     document_ids: Optional[List[str]] = Field(None, description="Filter to specific documents")
     provider: str = Field("ollama", description="LLM provider: ollama or openai")
     model: Optional[str] = Field(None, description="Model name (uses default if not specified)")
+    expert: str = Field("general", description="Expert role: general, financial_analyst, legal_expert, etc.")
     stream: bool = Field(True, description="Enable streaming response")
 
 
@@ -148,6 +149,7 @@ async def stream_chat(
         document_ids=document_ids,
         provider=request.provider,
         model=request.model,
+        expert=request.expert,
         stream=True,
     )
 
@@ -195,6 +197,7 @@ async def complete_chat(
         document_ids=document_ids,
         provider=request.provider,
         model=request.model,
+        expert=request.expert,
         stream=False,
     )
 

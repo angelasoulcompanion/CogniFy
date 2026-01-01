@@ -1,22 +1,28 @@
 /**
  * CogniFy Auth Hook & Store
- * Created with love by Angela & David - 1 January 2026
+ * Secure Token Management with HttpOnly Cookies
+ *
+ * Security:
+ * - Access token stored in memory/zustand
+ * - Refresh token stored in HttpOnly cookie (set by server)
+ *
+ * Created with love by Angela & David - 2 January 2026
  */
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { authApi } from '@/services/api'
+import { authApi, saveAccessToken, clearAuth } from '@/services/api'
 import type { User } from '@/types'
 import toast from 'react-hot-toast'
 
 interface AuthState {
   user: User | null
   token: string | null
-  refreshToken: string | null
   isAuthenticated: boolean
   isLoading: boolean
   login: (username: string, password: string) => Promise<boolean>
-  logout: () => void
+  logout: () => Promise<void>
+  logoutAll: () => Promise<void>
   setUser: (user: User) => void
   checkAuth: () => Promise<boolean>
 }
@@ -26,7 +32,6 @@ export const useAuth = create<AuthState>()(
     (set, get) => ({
       user: null,
       token: null,
-      refreshToken: null,
       isAuthenticated: false,
       isLoading: false,
 
@@ -35,16 +40,18 @@ export const useAuth = create<AuthState>()(
         try {
           const response = await authApi.login(username, password)
 
+          // Store access token (refresh token is in HttpOnly cookie)
+          saveAccessToken(response.access_token, response.expires_in)
+
           set({
             user: response.user,
-            token: response.tokens.access_token,
-            refreshToken: response.tokens.refresh_token,
+            token: response.access_token,
             isAuthenticated: true,
             isLoading: false,
           })
 
-          // Also store in localStorage for API interceptor
-          localStorage.setItem('token', response.tokens.access_token)
+          // Also store token in localStorage for API interceptor
+          localStorage.setItem('token', response.access_token)
 
           toast.success(`Welcome back, ${response.user.full_name || response.user.email}!`)
           return true
@@ -63,15 +70,41 @@ export const useAuth = create<AuthState>()(
         }
       },
 
-      logout: () => {
+      logout: async () => {
+        try {
+          // Call server to revoke tokens and clear cookie
+          await authApi.logout()
+        } catch {
+          // Ignore errors - still clear local state
+        }
+
         set({
           user: null,
           token: null,
-          refreshToken: null,
           isAuthenticated: false,
         })
-        localStorage.removeItem('token')
+
+        // Clear all auth data from localStorage
+        clearAuth()
         toast.success('Logged out successfully')
+      },
+
+      logoutAll: async () => {
+        try {
+          // Revoke all sessions on server
+          const result = await authApi.logoutAll()
+          toast.success(`Logged out from ${result.sessions_revoked} device(s)`)
+        } catch {
+          // Ignore errors
+        }
+
+        set({
+          user: null,
+          token: null,
+          isAuthenticated: false,
+        })
+
+        clearAuth()
       },
 
       setUser: (user: User) => {
@@ -90,7 +123,7 @@ export const useAuth = create<AuthState>()(
           return true
         } catch {
           // Token invalid - clear auth state
-          get().logout()
+          await get().logout()
           return false
         }
       },
@@ -100,7 +133,6 @@ export const useAuth = create<AuthState>()(
       partialize: (state) => ({
         user: state.user,
         token: state.token,
-        refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
       }),
     }

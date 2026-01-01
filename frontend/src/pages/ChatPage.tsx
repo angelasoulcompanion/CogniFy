@@ -21,9 +21,17 @@ import {
   Cpu,
   Cloud,
   Trash2,
+  GraduationCap,
+  BrainCircuit,
+  LineChart,
+  Scale,
+  FileCode,
+  Briefcase,
+  type LucideIcon,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
-import type { ChatMessage, SourceReference } from '@/types'
+import type { ChatMessage, SourceReference, StructuredResponse } from '@/types'
+import { StructuredResponseRenderer, isStructuredResponse } from '@/components/chat/StructuredResponse'
 
 // Model options - match actual installed Ollama models
 const MODEL_OPTIONS = {
@@ -40,11 +48,82 @@ const MODEL_OPTIONS = {
   ],
 }
 
+// Expert options for role-based prompting
+interface ExpertOption {
+  value: string
+  label: string
+  labelTh: string
+  icon: LucideIcon
+  color: string
+  description: string
+}
+
+const EXPERT_OPTIONS: ExpertOption[] = [
+  {
+    value: 'general',
+    label: 'General Assistant',
+    labelTh: 'ผู้ช่วยทั่วไป',
+    icon: Bot,
+    color: 'text-primary-400',
+    description: 'All-purpose helpful assistant',
+  },
+  {
+    value: 'financial_analyst',
+    label: 'Financial Analyst',
+    labelTh: 'นักวิเคราะห์การเงิน',
+    icon: LineChart,
+    color: 'text-green-400',
+    description: 'Financial data, reports, and analysis',
+  },
+  {
+    value: 'legal_expert',
+    label: 'Legal Expert',
+    labelTh: 'ผู้เชี่ยวชาญกฎหมาย',
+    icon: Scale,
+    color: 'text-yellow-400',
+    description: 'Contracts, legal documents, compliance',
+  },
+  {
+    value: 'technical_writer',
+    label: 'Technical Writer',
+    labelTh: 'นักเขียนเทคนิค',
+    icon: FileCode,
+    color: 'text-blue-400',
+    description: 'Documentation, specs, technical content',
+  },
+  {
+    value: 'data_analyst',
+    label: 'Data Analyst',
+    labelTh: 'นักวิเคราะห์ข้อมูล',
+    icon: BrainCircuit,
+    color: 'text-cyan-400',
+    description: 'Data patterns, statistics, insights',
+  },
+  {
+    value: 'business_consultant',
+    label: 'Business Consultant',
+    labelTh: 'ที่ปรึกษาธุรกิจ',
+    icon: Briefcase,
+    color: 'text-orange-400',
+    description: 'Strategy, operations, management',
+  },
+  {
+    value: 'researcher',
+    label: 'Researcher',
+    labelTh: 'นักวิจัย',
+    icon: GraduationCap,
+    color: 'text-purple-400',
+    description: 'Academic research, literature review',
+  },
+]
+
 export function ChatPage() {
   const [input, setInput] = useState('')
   const [modelType, setModelType] = useState<'local' | 'api'>('local')
   const [selectedModel, setSelectedModel] = useState(MODEL_OPTIONS.local[0])
+  const [selectedExpert, setSelectedExpert] = useState(EXPERT_OPTIONS[0])
   const [showModelSelector, setShowModelSelector] = useState(false)
+  const [showExpertSelector, setShowExpertSelector] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -57,6 +136,7 @@ export function ChatPage() {
   } = useChat({
     provider: selectedModel.provider,
     model: selectedModel.value,
+    expert: selectedExpert.value,
   })
 
   // Clear chat handler
@@ -113,6 +193,67 @@ export function ChatPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {/* Expert Selector */}
+          <div className="relative">
+            <button
+              onClick={() => setShowExpertSelector(!showExpertSelector)}
+              className="flex items-center gap-2 rounded-lg border border-secondary-700 bg-secondary-800/50 px-3 py-1.5 text-sm text-secondary-200 hover:bg-secondary-800 transition-colors"
+            >
+              <selectedExpert.icon className={cn('h-4 w-4', selectedExpert.color)} />
+              <span>{selectedExpert.label}</span>
+              <GraduationCap className="h-3.5 w-3.5 text-secondary-500" />
+            </button>
+
+            {showExpertSelector && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setShowExpertSelector(false)}
+                />
+                <div className="absolute right-0 top-full z-20 mt-2 w-72 rounded-xl border border-secondary-700 bg-secondary-800 p-2 shadow-xl">
+                  <div className="mb-2 px-2 py-1 text-xs font-medium text-secondary-400 uppercase tracking-wide">
+                    Select Expert Role
+                  </div>
+                  <div className="space-y-1">
+                    {EXPERT_OPTIONS.map((expert) => {
+                      const IconComponent = expert.icon
+                      return (
+                        <button
+                          key={expert.value}
+                          onClick={() => {
+                            setSelectedExpert(expert)
+                            setShowExpertSelector(false)
+                          }}
+                          className={cn(
+                            'w-full flex items-start gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                            selectedExpert.value === expert.value
+                              ? 'bg-primary-500/20'
+                              : 'hover:bg-secondary-700'
+                          )}
+                        >
+                          <IconComponent className={cn('h-5 w-5 mt-0.5 flex-shrink-0', expert.color)} />
+                          <div className="text-left">
+                            <div className={cn(
+                              'font-medium',
+                              selectedExpert.value === expert.value
+                                ? 'text-primary-300'
+                                : 'text-secondary-200'
+                            )}>
+                              {expert.label}
+                            </div>
+                            <div className="text-xs text-secondary-500">
+                              {expert.description}
+                            </div>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
           {/* Model Selector */}
           <div className="relative">
             <button
@@ -272,6 +413,33 @@ export function ChatPage() {
 }
 
 // =============================================================================
+// MESSAGE CONTENT COMPONENT (handles structured vs markdown)
+// =============================================================================
+
+function MessageContent({ content, isUser, isStreaming = false }: { content: string; isUser: boolean; isStreaming?: boolean }) {
+  // User messages are always plain text
+  if (isUser) {
+    return <span>{content}</span>
+  }
+
+  // During streaming: always show markdown (nice streaming experience)
+  // After streaming: try to parse as structured response first
+  if (!isStreaming) {
+    const structured = isStructuredResponse(content)
+    if (structured) {
+      return <StructuredResponseRenderer data={structured} />
+    }
+  }
+
+  // Show markdown (during streaming or as fallback)
+  return (
+    <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-purple-300 prose-strong:text-white prose-li:text-gray-300">
+      <ReactMarkdown>{content}</ReactMarkdown>
+    </div>
+  )
+}
+
+// =============================================================================
 // MESSAGE BUBBLE COMPONENT
 // =============================================================================
 
@@ -310,20 +478,24 @@ function MessageBubble({ message }: { message: ChatMessage }) {
               : 'bg-secondary-800 text-secondary-200'
           )}
         >
-          {isStreaming && !message.content ? (
-            <div className="flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Thinking...</span>
+          {isStreaming && (!message.content || message.content.trim().startsWith('{')) ? (
+            // During streaming JSON: show progress steps
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
+              <div className="flex flex-col gap-1">
+                <span className="text-purple-300">
+                  {!message.content ? '🔍 กำลังค้นหาข้อมูล...' : '✨ กำลังสร้างคำตอบ...'}
+                </span>
+                <span className="text-xs text-gray-500">กรุณารอสักครู่</span>
+              </div>
             </div>
           ) : (
-            <div className="prose prose-sm max-w-none dark:prose-invert">
-              <ReactMarkdown>{message.content}</ReactMarkdown>
-            </div>
+            <MessageContent content={message.content} isUser={isUser} isStreaming={isStreaming} />
           )}
         </div>
 
-        {/* Streaming indicator */}
-        {isStreaming && message.content && (
+        {/* Streaming indicator - hide for JSON streaming (already showing progress) */}
+        {isStreaming && message.content && !message.content.trim().startsWith('{') && (
           <div className="mt-2 flex items-center gap-2 text-sm text-secondary-500">
             <span className="flex gap-1">
               <span className="h-2 w-2 rounded-full bg-primary-500 animate-pulse-dot"></span>

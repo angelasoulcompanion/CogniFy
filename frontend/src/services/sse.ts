@@ -1,12 +1,48 @@
 /**
  * CogniFy SSE Streaming Service
  * Server-Sent Events for real-time chat
- * Created with love by Angela & David - 1 January 2026
+ * With secure token refresh support
+ *
+ * Created with love by Angela & David - 2 January 2026
  */
 
 import type { SSEEvent, RAGSettings } from '@/types'
+import { getTokens, saveAccessToken, clearAuth } from './api'
+import axios from 'axios'
 
 const API_BASE_URL = '/api'
+
+// Refresh token for SSE requests (uses HttpOnly cookie)
+const refreshTokenForSSE = async (): Promise<string | null> => {
+  try {
+    const response = await axios.post(
+      `${API_BASE_URL}/v1/auth/refresh`,
+      {}, // Empty body - refresh token is in cookie
+      { withCredentials: true }
+    )
+    const { access_token, expires_in } = response.data
+    saveAccessToken(access_token, expires_in)
+    return access_token
+  } catch {
+    clearAuth()
+    return null
+  }
+}
+
+// Get valid token (refresh if needed)
+const getValidToken = async (): Promise<string | null> => {
+  const { accessToken, expiry } = getTokens()
+
+  if (!accessToken) return null
+
+  // Check if token is about to expire (5 min buffer)
+  const bufferMs = 5 * 60 * 1000
+  if (expiry && Date.now() >= expiry - bufferMs) {
+    return await refreshTokenForSSE()
+  }
+
+  return accessToken
+}
 
 export interface StreamChatOptions {
   message: string
@@ -16,6 +52,7 @@ export interface StreamChatOptions {
   documentIds?: string[]
   provider?: string
   model?: string
+  expert?: string
   onEvent: (event: SSEEvent) => void
   onError: (error: Error) => void
   onComplete: () => void
@@ -33,12 +70,14 @@ export async function streamChat(options: StreamChatOptions): Promise<() => void
     documentIds,
     provider = 'ollama',
     model,
+    expert = 'general',
     onEvent,
     onError,
     onComplete,
   } = options
 
-  const token = localStorage.getItem('token')
+  // Get valid token (auto refresh if needed)
+  const token = await getValidToken()
 
   const body = JSON.stringify({
     message,
@@ -48,6 +87,7 @@ export async function streamChat(options: StreamChatOptions): Promise<() => void
     document_ids: documentIds,
     provider,
     model,
+    expert,
     stream: true,
   })
 
@@ -61,9 +101,16 @@ export async function streamChat(options: StreamChatOptions): Promise<() => void
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body,
+      credentials: 'include', // Send cookies for auth
     })
 
     if (!response.ok) {
+      // Handle 401 - session expired
+      if (response.status === 401) {
+        clearAuth()
+        window.location.href = '/login'
+        throw new Error('Session expired. Please login again.')
+      }
       throw new Error(`HTTP error! status: ${response.status}`)
     }
 

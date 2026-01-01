@@ -204,6 +204,36 @@ export interface SSEContentEvent {
   content: string;
 }
 
+export interface SSEContentCompleteEvent {
+  type: 'content_complete';
+  content: string;
+}
+
+// Structured Response Types
+export interface StructuredContentItem {
+  type: 'text' | 'fact' | 'list_item';
+  text?: string;
+  label?: string;
+  value?: string;
+}
+
+export interface StructuredSection {
+  heading: string;
+  items: StructuredContentItem[];
+}
+
+export interface StructuredResponse {
+  title: string;
+  sections: StructuredSection[];
+  sources_used: number[];
+  raw_text?: string;
+}
+
+export interface SSEStructuredResponseEvent {
+  type: 'structured_response';
+  structured: StructuredResponse;
+}
+
 export interface SSESourcesEvent {
   type: 'sources';
   sources: SourceReference[];
@@ -225,6 +255,8 @@ export type SSEEvent =
   | SSESearchStartEvent
   | SSESearchResultsEvent
   | SSEContentEvent
+  | SSEContentCompleteEvent
+  | SSEStructuredResponseEvent
   | SSESourcesEvent
   | SSEDoneEvent
   | SSEErrorEvent;

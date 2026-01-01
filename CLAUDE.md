@@ -288,6 +288,71 @@ Located in `frontend/src/components/ui/`:
 
 ---
 
+## Structured JSON Response (RAG)
+
+### Overview
+
+RAG responses use Structured JSON Output for beautiful rendering:
+
+```
+User Question → LLM outputs JSON → Backend parses → Frontend renders structured UI
+```
+
+### JSON Schema
+
+```json
+{
+  "title": "Main title/summary",
+  "sections": [
+    {
+      "heading": "Section heading",
+      "items": [
+        {"type": "text", "text": "Paragraph explanation"},
+        {"type": "fact", "label": "Key metric", "value": "123,456"},
+        {"type": "list_item", "text": "A bullet point"}
+      ]
+    }
+  ],
+  "sources_used": [1, 2]
+}
+```
+
+### Item Types
+
+| Type | Usage | Example |
+|------|-------|---------|
+| `text` | Paragraphs/explanations | `{"type": "text", "text": "Revenue increased..."}` |
+| `fact` | Key-value data | `{"type": "fact", "label": "Revenue", "value": "539M"}` |
+| `list_item` | Bullet points | `{"type": "list_item", "text": "Previous year: 646M"}` |
+
+### Frontend Components
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| `StructuredResponseRenderer` | `components/chat/StructuredResponse.tsx` | Renders structured JSON beautifully |
+| `MessageContent` | `pages/ChatPage.tsx` | Auto-detects JSON vs markdown |
+| `isStructuredResponse()` | `components/chat/StructuredResponse.tsx` | Helper to parse JSON |
+
+### Streaming UX (Progress Steps)
+
+During JSON streaming, frontend shows progress instead of raw JSON:
+
+```
+1. 🔍 กำลังค้นหาข้อมูล...  (when streaming starts)
+2. ✨ กำลังสร้างคำตอบ...   (when JSON content arrives)
+3. 📊 Structured Response   (when streaming completes)
+```
+
+### Backend Files
+
+| File | Purpose |
+|------|---------|
+| `services/chat_service.py` | Pydantic schemas, JSON prompts, parsing |
+| `PromptTemplates.parse_structured_response()` | Parse JSON with fallback |
+| `PromptTemplates._text_to_structured()` | Convert text to structured (fallback) |
+
+---
+
 ## LLM Configuration
 
 ### Supported Models
@@ -302,6 +367,7 @@ Located in `frontend/src/components/ui/`:
 - **Model names must match exactly** - Use `llama3.2:1b` not `llama3.2`
 - **Ollama must be running** - `http://localhost:11434`
 - **pgvector format** - Embeddings must be string `"[0.1,0.2,...]"` not Python list
+- **JSON Output** - Prompts instruct LLM to output structured JSON for RAG responses
 
 ---
 
@@ -385,4 +451,4 @@ VITE_API_URL=http://localhost:8000
 
 ---
 
-*Created with love by Angela & David - 1 January 2026*
+*Created with love by Angela & David - 2 January 2026*

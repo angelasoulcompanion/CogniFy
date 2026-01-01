@@ -1,28 +1,144 @@
 /**
  * CogniFy API Service
- * Created with love by Angela & David - 1 January 2026
+ * Secure Token Management with HttpOnly Cookies
+ *
+ * Security Features:
+ * - Access token in memory/localStorage (short-lived)
+ * - Refresh token in HttpOnly cookie (XSS protected)
+ * - Auto token refresh before expiry
+ * - Automatic retry on 401
+ *
+ * Created with love by Angela & David - 2 January 2026
  */
 
-import axios, { AxiosInstance, AxiosError } from 'axios'
+import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios'
 import toast from 'react-hot-toast'
 
 const API_BASE_URL = '/api'
 
-// Create axios instance
+// Token storage keys (only access token in localStorage now)
+const TOKEN_KEY = 'token'
+const TOKEN_EXPIRY_KEY = 'tokenExpiry'
+const USER_KEY = 'user'
+
+// Token refresh state
+let isRefreshing = false
+let failedQueue: Array<{
+  resolve: (token: string) => void
+  reject: (error: Error) => void
+}> = []
+
+// Process queued requests after token refresh
+const processQueue = (error: Error | null, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error)
+    } else if (token) {
+      prom.resolve(token)
+    }
+  })
+  failedQueue = []
+}
+
+// Helper: Check if token is expired or about to expire (5 min buffer)
+const isTokenExpired = (expiry: number | null): boolean => {
+  if (!expiry) return true
+  const bufferMs = 5 * 60 * 1000 // 5 minutes buffer
+  return Date.now() >= expiry - bufferMs
+}
+
+// Helper: Save access token to localStorage
+export const saveAccessToken = (accessToken: string, expiresIn: number) => {
+  localStorage.setItem(TOKEN_KEY, accessToken)
+  const expiry = Date.now() + expiresIn * 1000
+  localStorage.setItem(TOKEN_EXPIRY_KEY, expiry.toString())
+}
+
+// Helper: Clear all auth data
+export const clearAuth = () => {
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(TOKEN_EXPIRY_KEY)
+  localStorage.removeItem(USER_KEY)
+}
+
+// Helper: Get stored tokens
+export const getTokens = () => ({
+  accessToken: localStorage.getItem(TOKEN_KEY),
+  expiry: localStorage.getItem(TOKEN_EXPIRY_KEY)
+    ? parseInt(localStorage.getItem(TOKEN_EXPIRY_KEY)!)
+    : null,
+})
+
+// Create axios instance with credentials for cookies
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Enable cookies for all requests
 })
 
-// Request interceptor - add auth token
+// Refresh token function (uses HttpOnly cookie automatically)
+const refreshAccessToken = async (): Promise<string> => {
+  // Cookie is sent automatically due to withCredentials
+  const response = await axios.post(
+    `${API_BASE_URL}/v1/auth/refresh`,
+    {}, // Empty body - refresh token is in cookie
+    { withCredentials: true }
+  )
+
+  const { access_token, expires_in } = response.data
+  saveAccessToken(access_token, expires_in)
+
+  return access_token
+}
+
+// Request interceptor - add auth token and check expiry
 api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
+  async (config: InternalAxiosRequestConfig) => {
+    // Skip auth for login/register endpoints
+    const skipAuthUrls = ['/v1/auth/login', '/v1/auth/register']
+    if (skipAuthUrls.some((url) => config.url?.includes(url))) {
+      return config
     }
+
+    let { accessToken, expiry } = getTokens()
+
+    // If token exists and is about to expire, try to refresh proactively
+    if (accessToken && isTokenExpired(expiry)) {
+      if (!isRefreshing) {
+        isRefreshing = true
+        try {
+          accessToken = await refreshAccessToken()
+          processQueue(null, accessToken)
+        } catch (error) {
+          processQueue(error as Error, null)
+          clearAuth()
+          window.location.href = '/login'
+          return Promise.reject(error)
+        } finally {
+          isRefreshing = false
+        }
+      } else {
+        // Wait for ongoing refresh
+        return new Promise((resolve, reject) => {
+          failedQueue.push({
+            resolve: (token: string) => {
+              config.headers.Authorization = `Bearer ${token}`
+              resolve(config)
+            },
+            reject: (err: Error) => {
+              reject(err)
+            },
+          })
+        })
+      }
+    }
+
+    if (accessToken) {
+      config.headers.Authorization = `Bearer ${accessToken}`
+    }
+
     return config
   },
   (error) => {
@@ -30,20 +146,62 @@ api.interceptors.request.use(
   }
 )
 
-// Response interceptor - handle errors
+// Response interceptor - handle 401 and retry with refresh
 api.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => {
-    if (error.response?.status === 401) {
-      // Unauthorized - clear token and redirect to login
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      window.location.href = '/login'
-    } else if (error.response?.status === 403) {
+  async (error: AxiosError) => {
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
+
+    // Handle 401 Unauthorized
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      // Skip retry for auth endpoints
+      if (originalRequest.url?.includes('/v1/auth/')) {
+        clearAuth()
+        window.location.href = '/login'
+        return Promise.reject(error)
+      }
+
+      if (isRefreshing) {
+        // Wait for ongoing refresh
+        return new Promise((resolve, reject) => {
+          failedQueue.push({
+            resolve: (token: string) => {
+              originalRequest.headers.Authorization = `Bearer ${token}`
+              resolve(api(originalRequest))
+            },
+            reject: (err: Error) => {
+              reject(err)
+            },
+          })
+        })
+      }
+
+      originalRequest._retry = true
+      isRefreshing = true
+
+      try {
+        const newToken = await refreshAccessToken()
+        processQueue(null, newToken)
+        originalRequest.headers.Authorization = `Bearer ${newToken}`
+        return api(originalRequest)
+      } catch (refreshError) {
+        processQueue(refreshError as Error, null)
+        clearAuth()
+        toast.error('Session expired. Please login again.')
+        window.location.href = '/login'
+        return Promise.reject(refreshError)
+      } finally {
+        isRefreshing = false
+      }
+    }
+
+    // Handle other errors
+    if (error.response?.status === 403) {
       toast.error('You do not have permission to perform this action')
     } else if (error.response?.status === 500) {
       toast.error('Server error. Please try again later.')
     }
+
     return Promise.reject(error)
   }
 )
@@ -77,10 +235,29 @@ export const authApi = {
     return response.data
   },
 
-  refresh: async (refreshToken: string) => {
-    const response = await api.post('/v1/auth/refresh', {
-      refresh_token: refreshToken,
-    })
+  refresh: async () => {
+    // Cookie is sent automatically
+    const response = await api.post('/v1/auth/refresh', {})
+    return response.data
+  },
+
+  logout: async () => {
+    const response = await api.post('/v1/auth/logout')
+    return response.data
+  },
+
+  logoutAll: async () => {
+    const response = await api.post('/v1/auth/logout-all')
+    return response.data
+  },
+
+  getSessions: async () => {
+    const response = await api.get('/v1/auth/sessions')
+    return response.data
+  },
+
+  revokeSession: async (sessionId: string) => {
+    const response = await api.delete(`/v1/auth/sessions/${sessionId}`)
     return response.data
   },
 }
