@@ -161,6 +161,9 @@ class RAGService:
         if not query_embedding:
             return []
 
+        # Convert embedding to pgvector string format
+        query_embedding_str = self._embedding_to_pgvector(query_embedding)
+
         # Build similarity operator based on method
         similarity_op = self._get_similarity_operator(settings.similarity_method)
 
@@ -193,7 +196,7 @@ class RAGService:
         """
 
         # Build parameters
-        params: List[Any] = [query_embedding]
+        params: List[Any] = [query_embedding_str]
         param_idx = 2
 
         if user_id:
@@ -478,6 +481,33 @@ class RAGService:
             SimilarityMethod.DOT_PRODUCT: "<#>",
         }
         return operators.get(method, "<=>")
+
+    def _embedding_to_pgvector(self, embedding: Any) -> str:
+        """
+        Convert embedding to pgvector string format.
+
+        pgvector expects: "[0.1,0.2,0.3,...]" as string
+        Input could be: list, numpy array, or already a string
+        """
+        # Already a string
+        if isinstance(embedding, str):
+            # Clean it up if needed
+            if embedding.startswith('[') and embedding.endswith(']'):
+                return embedding
+            return f"[{embedding}]"
+
+        # If it's a list or array, convert to string
+        if hasattr(embedding, '__iter__'):
+            # Flatten if nested
+            flat = embedding
+            if len(embedding) > 0 and hasattr(embedding[0], '__iter__') and not isinstance(embedding[0], str):
+                flat = embedding[0]
+
+            # Convert to string format
+            values = ','.join(str(float(v)) for v in flat)
+            return f"[{values}]"
+
+        raise ValueError(f"Cannot convert embedding of type {type(embedding)} to pgvector format")
 
 
 # ============================================================================

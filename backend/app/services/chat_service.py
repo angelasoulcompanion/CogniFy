@@ -136,13 +136,13 @@ class ChatMessage:
 class Conversation:
     """Conversation with messages"""
     conversation_id: UUID
-    user_id: Optional[UUID]
-    title: Optional[str]
+    user_id: Optional[UUID] = None
+    title: Optional[str] = None
     messages: List[ChatMessage] = field(default_factory=list)
     rag_enabled: bool = True
     rag_settings: Optional[RAGSettings] = None
     model_provider: str = "ollama"
-    model_name: str = "llama3.2"
+    model_name: str = "llama3.2:1b"
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime = field(default_factory=datetime.utcnow)
 
@@ -438,7 +438,7 @@ class ChatService:
             conversation_id=conv_id,
             user_id=user_id,
             model_provider=provider or "ollama",
-            model_name=model or "llama3.2",
+            model_name=model or "llama3.2:1b",
         )
         self._conversations[conv_id] = conversation
         return conversation

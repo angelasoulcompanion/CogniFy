@@ -51,7 +51,7 @@ class Settings(BaseSettings):
 
     # LLM Settings - General
     LLM_PROVIDER: str = "ollama"  # ollama or openai
-    LLM_MODEL: str = "llama3.2"
+    LLM_MODEL: str = "llama3.2:1b"
     LLM_TEMPERATURE: float = 0.7
     LLM_MAX_TOKENS: int = 2048
 

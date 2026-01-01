@@ -102,7 +102,7 @@ class ConversationCreateRequest(BaseModel):
     """Create conversation request"""
     title: Optional[str] = None
     model_provider: str = "ollama"
-    model_name: str = "llama3.2"
+    model_name: str = "llama3.2:1b"
     rag_enabled: bool = True
     rag_settings: Optional[RAGSettingsRequest] = None
 

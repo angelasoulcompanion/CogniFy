@@ -17,22 +17,54 @@ import {
   Sparkles,
   Search,
   Loader2,
+  Settings2,
+  Cpu,
+  Cloud,
+  Trash2,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import type { ChatMessage, SourceReference } from '@/types'
 
+// Model options - match actual installed Ollama models
+const MODEL_OPTIONS = {
+  local: [
+    { value: 'llama3.2:1b', label: 'Llama 3.2 (1B)', provider: 'ollama' },
+    { value: 'llama3.1:8b', label: 'Llama 3.1 (8B)', provider: 'ollama' },
+    { value: 'qwen2.5:7b', label: 'Qwen 2.5 (7B)', provider: 'ollama' },
+    { value: 'qwen2.5:3b', label: 'Qwen 2.5 (3B)', provider: 'ollama' },
+    { value: 'phi3:mini', label: 'Phi-3 Mini', provider: 'ollama' },
+  ],
+  api: [
+    { value: 'gpt-4o', label: 'GPT-4o', provider: 'openai' },
+    { value: 'gpt-4o-mini', label: 'GPT-4o Mini', provider: 'openai' },
+  ],
+}
+
 export function ChatPage() {
   const [input, setInput] = useState('')
+  const [modelType, setModelType] = useState<'local' | 'api'>('local')
+  const [selectedModel, setSelectedModel] = useState(MODEL_OPTIONS.local[0])
+  const [showModelSelector, setShowModelSelector] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  const { messages } = useChatStore()
+  const { messages, clearMessages } = useChatStore()
   const {
     isStreaming,
     isLoading,
     sendMessage,
     stopStreaming,
-  } = useChat()
+  } = useChat({
+    provider: selectedModel.provider,
+    model: selectedModel.value,
+  })
+
+  // Clear chat handler
+  const handleClearChat = () => {
+    if (messages.length > 0 && !isStreaming) {
+      clearMessages()
+    }
+  }
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -80,7 +112,103 @@ export function ChatPage() {
             <p className="text-sm text-secondary-400">Ask questions about your documents</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {/* Model Selector */}
+          <div className="relative">
+            <button
+              onClick={() => setShowModelSelector(!showModelSelector)}
+              className="flex items-center gap-2 rounded-lg border border-secondary-700 bg-secondary-800/50 px-3 py-1.5 text-sm text-secondary-200 hover:bg-secondary-800 transition-colors"
+            >
+              {modelType === 'local' ? (
+                <Cpu className="h-4 w-4 text-green-400" />
+              ) : (
+                <Cloud className="h-4 w-4 text-blue-400" />
+              )}
+              <span>{selectedModel.label}</span>
+              <Settings2 className="h-3.5 w-3.5 text-secondary-500" />
+            </button>
+
+            {showModelSelector && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setShowModelSelector(false)}
+                />
+                <div className="absolute right-0 top-full z-20 mt-2 w-64 rounded-xl border border-secondary-700 bg-secondary-800 p-2 shadow-xl">
+                  {/* Type Toggle */}
+                  <div className="flex gap-1 rounded-lg bg-secondary-900 p-1 mb-2">
+                    <button
+                      onClick={() => {
+                        setModelType('local')
+                        setSelectedModel(MODEL_OPTIONS.local[0])
+                      }}
+                      className={cn(
+                        'flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                        modelType === 'local'
+                          ? 'bg-green-500/20 text-green-400'
+                          : 'text-secondary-400 hover:text-white'
+                      )}
+                    >
+                      <Cpu className="h-4 w-4" />
+                      Local
+                    </button>
+                    <button
+                      onClick={() => {
+                        setModelType('api')
+                        setSelectedModel(MODEL_OPTIONS.api[0])
+                      }}
+                      className={cn(
+                        'flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                        modelType === 'api'
+                          ? 'bg-blue-500/20 text-blue-400'
+                          : 'text-secondary-400 hover:text-white'
+                      )}
+                    >
+                      <Cloud className="h-4 w-4" />
+                      API
+                    </button>
+                  </div>
+
+                  {/* Model Options */}
+                  <div className="space-y-1">
+                    {MODEL_OPTIONS[modelType].map((model) => (
+                      <button
+                        key={model.value}
+                        onClick={() => {
+                          setSelectedModel(model)
+                          setShowModelSelector(false)
+                        }}
+                        className={cn(
+                          'w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors',
+                          selectedModel.value === model.value
+                            ? 'bg-primary-500/20 text-primary-300'
+                            : 'text-secondary-300 hover:bg-secondary-700'
+                        )}
+                      >
+                        <span>{model.label}</span>
+                        <span className="text-xs text-secondary-500">{model.provider}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Clear Chat Button */}
+          {messages.length > 0 && (
+            <button
+              onClick={handleClearChat}
+              disabled={isStreaming}
+              className="flex items-center gap-2 rounded-lg border border-secondary-700 bg-secondary-800/50 px-3 py-1.5 text-sm text-secondary-300 hover:bg-red-500/20 hover:border-red-500/50 hover:text-red-400 transition-colors disabled:opacity-50"
+              title="Clear chat"
+            >
+              <Trash2 className="h-4 w-4" />
+              Clear
+            </button>
+          )}
+
+          {/* RAG Badge */}
           <span className="inline-flex items-center gap-1.5 rounded-full bg-green-500/20 px-3 py-1 text-sm text-green-400">
             <span className="h-2 w-2 rounded-full bg-green-500"></span>
             RAG Enabled

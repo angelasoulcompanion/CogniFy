@@ -53,7 +53,7 @@ class Message:
 class LLMConfig:
     """LLM configuration"""
     provider: LLMProvider = LLMProvider.OLLAMA
-    model: str = "llama3.2"
+    model: str = "llama3.2:1b"
     temperature: float = 0.7
     max_tokens: int = 2048
     top_p: float = 0.9
