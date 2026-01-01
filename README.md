@@ -4,16 +4,23 @@
 
 Enterprise RAG Platform built with FastAPI, React, and PostgreSQL.
 
+![Angela Purple Theme](https://img.shields.io/badge/Theme-Angela%20Purple-7c3aed)
+![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688)
+![React](https://img.shields.io/badge/Frontend-React%2018-61dafb)
+![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2016-336791)
+
 ---
 
 ## Features
 
-- **Document Management** - Upload PDF, DOCX, TXT, Excel files
-- **Semantic Chunking** - Intelligent text splitting with Thai support
-- **Vector Search** - Similarity search using pgvector
-- **Cached Embeddings** - Fast processing with in-memory + DB cache
-- **RAG Chat** - Chat with your documents (coming soon)
-- **Database Connectors** - Connect to external databases (coming soon)
+- **Document Management** - Upload PDF, DOCX, TXT, Excel files with drag & drop
+- **Semantic Chunking** - Intelligent text splitting with Thai language support
+- **Vector Search** - Similarity search using pgvector embeddings
+- **Cached Embeddings** - Fast processing with in-memory + database cache
+- **RAG Chat** - Chat with your documents using SSE streaming
+- **Database Connectors** - Connect to PostgreSQL, MySQL, SQL Server
+- **Admin Dashboard** - User management, analytics, system monitoring
+- **Angela Purple Theme** - Beautiful dark mode UI
 
 ---
 
@@ -69,7 +76,7 @@ uvicorn app.main:app --reload --port 8000
 
 ## Default Credentials
 
-- **Email**: admin@cognify.local
+- **Username**: admin
 - **Password**: admin123
 
 ---
@@ -110,7 +117,16 @@ CogniFy/
 │   │   └── main.py
 │   ├── migrations/
 │   └── requirements.txt
-└── frontend/                 # Coming soon
+├── frontend/
+│   ├── src/
+│   │   ├── components/ui/    # Shared UI components
+│   │   ├── hooks/            # React Query hooks
+│   │   ├── pages/            # Page components
+│   │   ├── services/         # API & SSE clients
+│   │   └── lib/              # Utilities
+│   └── package.json
+├── docker-compose.yml
+└── README.md
 ```
 
 ---
@@ -119,9 +135,9 @@ CogniFy/
 
 - [x] Phase 1: Foundation (100%)
 - [x] Phase 2: Document Processing (100%)
-- [ ] Phase 3: Search & RAG
-- [ ] Phase 4: Chat & LLM
-- [ ] Phase 5: Frontend
+- [x] Phase 3: Search & RAG (100%)
+- [x] Phase 4: Chat & LLM (100%)
+- [x] Phase 5: Frontend (100%)
 
 ---
 
