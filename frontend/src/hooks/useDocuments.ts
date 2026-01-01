@@ -62,7 +62,8 @@ export function useUploadDocument() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['documents'] })
-      toast.success(`Document "${data.document.original_filename}" uploaded successfully`)
+      const filename = data.original_filename || data.document?.original_filename || 'Document'
+      toast.success(`Document "${filename}" uploaded successfully`)
     },
     onError: (error: Error) => {
       toast.error(`Upload failed: ${error.message}`)
