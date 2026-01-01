@@ -156,6 +156,10 @@ class EmbeddingService:
             print(f"⚠️ OpenAI embedding error: {e}")
             return None
 
+    def _embedding_to_pgvector(self, embedding: List[float]) -> str:
+        """Convert embedding list to pgvector string format"""
+        return "[" + ",".join(str(x) for x in embedding) + "]"
+
     async def _save_to_db_cache(
         self,
         text: str,
@@ -165,6 +169,7 @@ class EmbeddingService:
         """Save embedding to database cache"""
         try:
             text_hash = hashlib.md5(f"{model}:{text}".encode()).hexdigest()
+            embedding_str = self._embedding_to_pgvector(embedding)
             await Database.execute(
                 """
                 INSERT INTO embedding_cache (text_hash, embedding, model_name, expires_at)
@@ -172,7 +177,7 @@ class EmbeddingService:
                 ON CONFLICT (text_hash, model_name) DO UPDATE
                 SET embedding = $2::vector, expires_at = NOW() + INTERVAL '1 hour'
                 """,
-                text_hash, embedding, model
+                text_hash, embedding_str, model
             )
         except Exception as e:
             print(f"⚠️ Failed to cache embedding in DB: {e}")

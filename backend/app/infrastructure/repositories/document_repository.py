@@ -241,6 +241,10 @@ class DocumentChunkRepository(BaseRepository[DocumentChunk]):
     def __init__(self):
         super().__init__("document_chunks", "chunk_id")
 
+    def _embedding_to_pgvector(self, embedding: List[float]) -> str:
+        """Convert embedding list to pgvector string format"""
+        return "[" + ",".join(str(x) for x in embedding) + "]"
+
     def _row_to_entity(self, row: asyncpg.Record) -> DocumentChunk:
         """Convert database row to DocumentChunk entity"""
         return DocumentChunk(
@@ -281,6 +285,7 @@ class DocumentChunkRepository(BaseRepository[DocumentChunk]):
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector, $9, $10)
             RETURNING *
         """
+        embedding_str = self._embedding_to_pgvector(chunk.embedding) if chunk.embedding else None
         row = await Database.fetchrow(
             query,
             chunk.chunk_id,
@@ -290,7 +295,7 @@ class DocumentChunkRepository(BaseRepository[DocumentChunk]):
             chunk.page_number,
             chunk.section_title,
             chunk.token_count,
-            chunk.embedding,
+            embedding_str,
             chunk.embedding_model,
             chunk.created_at,
         )
@@ -318,7 +323,7 @@ class DocumentChunkRepository(BaseRepository[DocumentChunk]):
                 chunk.page_number,
                 chunk.section_title,
                 chunk.token_count,
-                chunk.embedding,
+                self._embedding_to_pgvector(chunk.embedding) if chunk.embedding else None,
                 chunk.embedding_model,
                 chunk.created_at,
             )
@@ -356,6 +361,7 @@ class DocumentChunkRepository(BaseRepository[DocumentChunk]):
         document_ids: Optional[List[UUID]] = None
     ) -> List[tuple[DocumentChunk, float]]:
         """Search for similar chunks using vector similarity"""
+        embedding_str = self._embedding_to_pgvector(embedding)
         if document_ids:
             query = """
                 SELECT *, (embedding <=> $1::vector) as distance
@@ -366,7 +372,7 @@ class DocumentChunkRepository(BaseRepository[DocumentChunk]):
                 ORDER BY distance ASC
                 LIMIT $2
             """
-            rows = await Database.fetch(query, embedding, top_k, threshold, document_ids)
+            rows = await Database.fetch(query, embedding_str, top_k, threshold, document_ids)
         else:
             query = """
                 SELECT *, (embedding <=> $1::vector) as distance
@@ -376,7 +382,7 @@ class DocumentChunkRepository(BaseRepository[DocumentChunk]):
                 ORDER BY distance ASC
                 LIMIT $2
             """
-            rows = await Database.fetch(query, embedding, top_k, threshold)
+            rows = await Database.fetch(query, embedding_str, top_k, threshold)
 
         results = []
         for row in rows:

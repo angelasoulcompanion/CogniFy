@@ -37,3 +37,6 @@ htmlcov/
 # Misc
 *.bak
 *.tmp
+
+# Uploaded files
+backend/uploads/

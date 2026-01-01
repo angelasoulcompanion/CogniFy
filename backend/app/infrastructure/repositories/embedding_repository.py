@@ -90,7 +90,8 @@ class EmbeddingRepository:
 
         try:
             pool = await Database.get_pool()
-            await pool.execute(sql, text_hash, embedding, model_name, expires_at)
+            embedding_str = self._embedding_to_pgvector(embedding)
+            await pool.execute(sql, text_hash, embedding_str, model_name, expires_at)
             return True
         except Exception as e:
             print(f"Failed to cache embedding: {e}")
@@ -187,7 +188,8 @@ class EmbeddingRepository:
               AND d.processing_status = 'completed'
         """
 
-        params: list = [embedding]
+        embedding_str = self._embedding_to_pgvector(embedding)
+        params: list = [embedding_str]
         param_idx = 2
 
         if document_ids:
@@ -262,8 +264,9 @@ class EmbeddingRepository:
             LIMIT $3
         """
 
+        embedding_str = self._embedding_to_pgvector(embedding)
         pool = await Database.get_pool()
-        rows = await pool.fetch(sql, embedding, threshold, limit)
+        rows = await pool.fetch(sql, embedding_str, threshold, limit)
 
         return [
             {
@@ -296,7 +299,8 @@ class EmbeddingRepository:
 
         try:
             pool = await Database.get_pool()
-            await pool.execute(sql, str(chunk_id), embedding, model_name)
+            embedding_str = self._embedding_to_pgvector(embedding)
+            await pool.execute(sql, str(chunk_id), embedding_str, model_name)
             return True
         except Exception as e:
             print(f"Failed to update chunk embedding: {e}")
@@ -385,6 +389,10 @@ class EmbeddingRepository:
         if not clean:
             return []
         return [float(x) for x in clean.split(",")]
+
+    def _embedding_to_pgvector(self, embedding: List[float]) -> str:
+        """Convert embedding list to pgvector string format"""
+        return "[" + ",".join(str(x) for x in embedding) + "]"
 
 
 # ============================================================================
