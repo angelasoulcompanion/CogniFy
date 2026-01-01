@@ -1,0 +1,128 @@
+# CogniFy Docker Compose
+# Enterprise RAG Platform
+# Created with love by Angela & David - 1 January 2026
+#
+# Usage:
+#   Development:  docker-compose up -d
+#   Production:   docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#   Logs:         docker-compose logs -f
+#   Stop:         docker-compose down
+#   Reset:        docker-compose down -v
+
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # PostgreSQL Database with pgvector
+  # ==========================================================================
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: cognify-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-cognify}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-cognify123}
+      POSTGRES_DB: ${DB_NAME:-cognify}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-cognify} -d ${DB_NAME:-cognify}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================================================
+  # Backend API (FastAPI)
+  # ==========================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cognify-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Database
+      DATABASE_URL: postgresql://${DB_USER:-cognify}:${DB_PASSWORD:-cognify123}@db:5432/${DB_NAME:-cognify}
+      # JWT
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-your-super-secret-key-change-in-production}
+      JWT_ALGORITHM: HS256
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      JWT_REFRESH_TOKEN_EXPIRE_DAYS: 7
+      # Embedding
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+      # LLM
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      LLM_MODEL: ${LLM_MODEL:-llama3.2}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # Encryption
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      # App
+      DEBUG: ${DEBUG:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://localhost:80,http://localhost:5173}
+    volumes:
+      - uploads_data:/app/uploads
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # Frontend (React + Nginx)
+  # ==========================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: cognify-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # Ollama (Optional - for local LLM)
+  # ==========================================================================
+  # Uncomment to run Ollama in container (requires GPU support)
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: cognify-ollama
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   ports:
+  #     - "11434:11434"
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all
+  #             capabilities: [gpu]
+
+volumes:
+  postgres_data:
+    driver: local
+  uploads_data:
+    driver: local
+  # ollama_data:
+  #   driver: local
+
+networks:
+  default:
+    name: cognify-network

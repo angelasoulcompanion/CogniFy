@@ -1,0 +1,64 @@
+# CogniFy Backend Docker Ignore
+# Created with love by Angela & David - 1 January 2026
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache
+.coverage
+htmlcov
+.tox
+.nox
+.hypothesis
+*.egg-info
+dist
+build
+eggs
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# Testing
+tests/
+pytest.ini
+.coverage
+coverage.xml
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.docker
+
+# Documentation
+*.md
+docs/
+
+# Uploads (will be mounted as volume)
+uploads/
+
+# Logs
+logs/
+*.log
+
+# Local config
+.env.local
+.env.*.local
