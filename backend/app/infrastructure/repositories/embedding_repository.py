@@ -390,9 +390,23 @@ class EmbeddingRepository:
             return []
         return [float(x) for x in clean.split(",")]
 
-    def _embedding_to_pgvector(self, embedding: List[float]) -> str:
-        """Convert embedding list to pgvector string format"""
-        return "[" + ",".join(str(x) for x in embedding) + "]"
+    def _embedding_to_pgvector(self, embedding) -> str:
+        """Convert embedding to pgvector string format"""
+        # Already a string - return as-is (but validate format)
+        if isinstance(embedding, str):
+            if embedding.startswith('[') and embedding.endswith(']'):
+                return embedding
+            return "[" + embedding + "]"
+
+        # Nested list [[...]] - unwrap
+        if isinstance(embedding, list) and len(embedding) == 1 and isinstance(embedding[0], list):
+            embedding = embedding[0]
+
+        # Normal list of floats
+        if isinstance(embedding, list):
+            return "[" + ",".join(str(float(x)) for x in embedding) + "]"
+
+        raise ValueError(f"Invalid embedding type: {type(embedding)}")
 
 
 # ============================================================================

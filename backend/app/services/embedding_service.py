@@ -156,9 +156,23 @@ class EmbeddingService:
             print(f"⚠️ OpenAI embedding error: {e}")
             return None
 
-    def _embedding_to_pgvector(self, embedding: List[float]) -> str:
-        """Convert embedding list to pgvector string format"""
-        return "[" + ",".join(str(x) for x in embedding) + "]"
+    def _embedding_to_pgvector(self, embedding) -> str:
+        """Convert embedding to pgvector string format"""
+        # Already a string - return as-is (but validate format)
+        if isinstance(embedding, str):
+            if embedding.startswith('[') and embedding.endswith(']'):
+                return embedding
+            return "[" + embedding + "]"
+
+        # Nested list [[...]] - unwrap
+        if isinstance(embedding, list) and len(embedding) == 1 and isinstance(embedding[0], list):
+            embedding = embedding[0]
+
+        # Normal list of floats
+        if isinstance(embedding, list):
+            return "[" + ",".join(str(float(x)) for x in embedding) + "]"
+
+        raise ValueError(f"Invalid embedding type: {type(embedding)}")
 
     async def _save_to_db_cache(
         self,
@@ -198,7 +212,13 @@ class EmbeddingService:
                 text_hash, model
             )
             if row and row["embedding"]:
-                return list(row["embedding"])
+                emb = row["embedding"]
+                # If pgvector returns as string "[0.1,0.2,...]" - parse it
+                if isinstance(emb, str):
+                    clean = emb.strip("[]")
+                    return [float(x) for x in clean.split(",")] if clean else []
+                # If already a list/tuple, convert to list of floats
+                return [float(x) for x in emb]
         except Exception as e:
             print(f"⚠️ Failed to get embedding from DB cache: {e}")
         return None
