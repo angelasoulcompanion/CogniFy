@@ -58,9 +58,10 @@ CogniFy is a RAG (Retrieval-Augmented Generation) platform that helps organizati
 | **Frontend** | React 18 + TypeScript + Vite + TailwindCSS |
 | **Backend** | FastAPI + Python 3.11+ |
 | **Database** | PostgreSQL 16 + pgvector |
-| **LLM** | Ollama (local) / OpenAI (optional) |
+| **LLM** | Ollama (Llama 3.2, Qwen 2.5, Phi-3) / OpenAI (optional) |
 | **Embedding** | nomic-embed-text (768 dimensions) |
-| **State** | React Query (TanStack Query) |
+| **OCR** | Tesseract + PaddleOCR + EasyOCR |
+| **State** | React Query (TanStack Query) + Zustand |
 
 ---
 
@@ -260,7 +261,10 @@ docker-compose down
 | GET | `/api/v1/documents` | List documents |
 | POST | `/api/v1/documents/upload` | Upload document |
 | DELETE | `/api/v1/documents/{id}` | Delete document |
-| POST | `/api/v1/chat` | Chat with RAG (SSE) |
+| POST | `/api/v1/chat/stream` | Chat with RAG (SSE streaming) |
+| POST | `/api/v1/chat/complete` | Chat with RAG (non-streaming) |
+| GET | `/api/v1/chat/health` | LLM health check |
+| GET | `/api/v1/chat/models` | List available models |
 | GET | `/api/v1/connectors` | List database connectors |
 | POST | `/api/v1/connectors` | Create connector |
 | POST | `/api/v1/connectors/{id}/sync` | Sync connector data |
@@ -284,6 +288,23 @@ Located in `frontend/src/components/ui/`:
 
 ---
 
+## LLM Configuration
+
+### Supported Models
+
+| Type | Model | Default |
+|------|-------|---------|
+| **Local (Ollama)** | `llama3.2:1b`, `llama3.1:8b`, `qwen2.5:7b`, `qwen2.5:3b`, `phi3:mini` | `llama3.2:1b` |
+| **API (OpenAI)** | `gpt-4o`, `gpt-4o-mini` | - |
+
+### Important Notes
+
+- **Model names must match exactly** - Use `llama3.2:1b` not `llama3.2`
+- **Ollama must be running** - `http://localhost:11434`
+- **pgvector format** - Embeddings must be string `"[0.1,0.2,...]"` not Python list
+
+---
+
 ## Environment Variables
 
 ### Backend (.env)
@@ -292,6 +313,7 @@ Located in `frontend/src/components/ui/`:
 DATABASE_URL=postgresql://user:pass@localhost:5432/cognify
 SECRET_KEY=your-secret-key
 OLLAMA_BASE_URL=http://localhost:11434
+LLM_MODEL=llama3.2:1b
 OPENAI_API_KEY=sk-... (optional)
 ```
 
@@ -332,6 +354,8 @@ VITE_API_URL=http://localhost:8000
 - Use React Query for all API calls
 - Use SSE for chat streaming
 - Follow DRY principle
+- Use exact Ollama model names (e.g., `llama3.2:1b`)
+- Convert embeddings to string before pgvector queries
 
 ### MUST NOT:
 - Skip type annotations
@@ -340,6 +364,8 @@ VITE_API_URL=http://localhost:8000
 - Use raw fetch (use api client)
 - Hardcode credentials
 - Commit .env files
+- Pass Python lists directly to pgvector (must be string)
+- Use generic model names without version (e.g., `llama3.2` without `:1b`)
 
 ---
 

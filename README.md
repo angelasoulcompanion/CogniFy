@@ -13,11 +13,13 @@ Enterprise RAG Platform built with FastAPI, React, and PostgreSQL.
 
 ## Features
 
-- **Document Management** - Upload PDF, DOCX, TXT, Excel files with drag & drop
+- **Document Management** - Upload PDF, DOCX, TXT, Excel, Images with drag & drop
+- **OCR Support** - Extract text from images and scanned PDFs
 - **Semantic Chunking** - Intelligent text splitting with Thai language support
 - **Vector Search** - Similarity search using pgvector embeddings
 - **Cached Embeddings** - Fast processing with in-memory + database cache
 - **RAG Chat** - Chat with your documents using SSE streaming
+- **Model Selector** - Switch between Local (Ollama) and API models
 - **Database Connectors** - Connect to PostgreSQL, MySQL, SQL Server
 - **Admin Dashboard** - User management, analytics, system monitoring
 - **Angela Purple Theme** - Beautiful dark mode UI
@@ -31,8 +33,9 @@ Enterprise RAG Platform built with FastAPI, React, and PostgreSQL.
 | **Frontend** | React 18 + TypeScript + Vite |
 | **Backend** | FastAPI (Python 3.11+) |
 | **Database** | PostgreSQL 16 + pgvector |
-| **LLM** | Ollama (local) + OpenAI (optional) |
+| **LLM** | Ollama (Llama 3.2, Qwen 2.5, Phi-3) + OpenAI (optional) |
 | **Embedding** | nomic-embed-text (768-dim) |
+| **OCR** | Tesseract + PaddleOCR + EasyOCR |
 
 ---
 
@@ -97,9 +100,33 @@ uvicorn app.main:app --reload --port 8000
 - `POST /api/v1/documents/{id}/process` - Trigger processing
 - `DELETE /api/v1/documents/{id}` - Delete document
 
+### Chat
+- `POST /api/v1/chat/stream` - SSE streaming chat with RAG
+- `POST /api/v1/chat/complete` - Non-streaming chat
+- `GET /api/v1/chat/conversations` - List conversations
+- `DELETE /api/v1/chat/conversations/{id}` - Delete conversation
+
 ### Health
 - `GET /api/health` - System health
 - `GET /api/health/embedding` - Embedding service health
+
+---
+
+## Supported LLM Models
+
+### Local (Ollama)
+| Model | Size | Performance |
+|-------|------|-------------|
+| Llama 3.2 (1B) | 1B | Fast, good for simple queries |
+| Llama 3.1 (8B) | 8B | Good balance |
+| Qwen 2.5 (7B) | 7B | Excellent for Thai/English |
+| Qwen 2.5 (3B) | 3B | Good balance |
+| Phi-3 Mini | 3.8B | Fast, efficient |
+
+### API (Optional)
+| Provider | Models |
+|----------|--------|
+| OpenAI | GPT-4o, GPT-4o Mini |
 
 ---
 

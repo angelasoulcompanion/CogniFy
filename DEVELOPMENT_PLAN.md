@@ -205,7 +205,10 @@ backend/app/infrastructure/repositories/
 - [x] **Tailwind CSS** - Utility-first styling with custom theme
 - [x] **Login Page** - JWT auth with show/hide password
 - [x] **Chat Page** - SSE streaming with markdown, sources, typing indicator
-- [x] **Documents Page** - Upload, drag & drop, search, delete
+- [x] **Model Selector** - Switch between Local (Ollama) and API models
+- [x] **Clear Chat** - Clear conversation with one click
+- [x] **Documents Page** - Upload, drag & drop, search, delete, progress bar
+- [x] **Auto-Polling** - Real-time status updates for processing documents
 - [x] **Layout** - Collapsible sidebar with navigation
 - [x] **Hooks** - useAuth (Zustand), useChat (SSE), useDocuments (React Query)
 - [x] **API Services** - Axios with interceptors, SSE streaming
@@ -215,18 +218,24 @@ backend/app/infrastructure/repositories/
 frontend/src/
 ├── pages/
 │   ├── LoginPage.tsx       # 130 lines - JWT login form
-│   ├── ChatPage.tsx        # 350 lines - SSE chat with sources
-│   └── DocumentsPage.tsx   # 330 lines - Document management
+│   ├── ChatPage.tsx        # 450 lines - SSE chat with model selector
+│   └── DocumentsPage.tsx   # 430 lines - Document management + progress
 ├── hooks/
 │   ├── useAuth.ts          # 80 lines - Zustand + persist
-│   ├── useChat.ts          # 150 lines - SSE streaming
-│   └── useDocuments.ts     # 100 lines - React Query
+│   ├── useChat.ts          # 280 lines - SSE streaming + Zustand store
+│   └── useDocuments.ts     # 130 lines - React Query + polling
 ├── services/
 │   ├── api.ts              # 200 lines - Axios client
 │   └── sse.ts              # 120 lines - SSE streaming
 └── components/layout/
     └── Layout.tsx          # 120 lines - Sidebar + navigation
 ```
+
+**Supported LLM Models:**
+| Type | Models |
+|------|--------|
+| Local (Ollama) | Llama 3.2 (1B), Llama 3.1 (8B), Qwen 2.5 (7B/3B), Phi-3 Mini |
+| API (Optional) | GPT-4o, GPT-4o Mini |
 
 ### Phase 6: Database Connectors ✅ COMPLETED
 
