@@ -396,16 +396,11 @@ class DocumentService:
             await self.chunk_repo.delete_by_document(document_id)
             await self.chunk_repo.create_batch(document_chunks)
 
-            # 6. Update document status
-            await self.document_repo.update_status(
-                document_id,
-                ProcessingStatus.COMPLETED,
-                chunk_count=len(document_chunks)
-            )
-
-            # Update page count
+            # 6. Update document status to COMPLETED
+            document.processing_status = ProcessingStatus.COMPLETED
             document.page_count = page_count
             document.total_chunks = len(document_chunks)
+            document.processed_at = datetime.now()
             await self.document_repo.update(document)
 
             if on_progress:
