@@ -184,6 +184,9 @@ class DocumentRepository(BaseRepository[Document]):
         chunk_count: Optional[int] = None
     ) -> bool:
         """Update document processing status"""
+        # Ensure document_id is UUID type for PostgreSQL
+        doc_id = document_id if isinstance(document_id, UUID) else UUID(str(document_id))
+
         if status == ProcessingStatus.COMPLETED:
             query = """
                 UPDATE documents
@@ -191,7 +194,7 @@ class DocumentRepository(BaseRepository[Document]):
                 WHERE document_id = $1
                 RETURNING document_id
             """
-            result = await Database.fetchval(query, document_id, status.value, chunk_count or 0)
+            result = await Database.fetchval(query, doc_id, status.value, chunk_count or 0)
         elif status == ProcessingStatus.FAILED:
             query = """
                 UPDATE documents
@@ -199,7 +202,7 @@ class DocumentRepository(BaseRepository[Document]):
                 WHERE document_id = $1
                 RETURNING document_id
             """
-            result = await Database.fetchval(query, document_id, status.value, error)
+            result = await Database.fetchval(query, doc_id, status.value, error)
         else:
             query = """
                 UPDATE documents
@@ -207,7 +210,7 @@ class DocumentRepository(BaseRepository[Document]):
                 WHERE document_id = $1
                 RETURNING document_id
             """
-            result = await Database.fetchval(query, document_id, status.value)
+            result = await Database.fetchval(query, doc_id, status.value)
 
         return result is not None
 
