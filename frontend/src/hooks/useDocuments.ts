@@ -11,11 +11,13 @@ import toast from 'react-hot-toast'
 // DOCUMENTS QUERY HOOKS
 // =============================================================================
 
-export function useDocuments(limit = 20, offset = 0) {
+export function useDocuments(limit = 20, offset = 0, enablePolling = false) {
   return useQuery({
     queryKey: ['documents', limit, offset],
     queryFn: () => documentsApi.list(limit, offset),
     select: (data) => data.documents || [],
+    // Auto-poll every 2 seconds when enabled (for tracking processing status)
+    refetchInterval: enablePolling ? 2000 : false,
   })
 }
 

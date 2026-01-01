@@ -4,7 +4,7 @@
  * Created with love by Angela & David - 1 January 2026
  */
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   useDocuments,
   useUploadDocument,
@@ -15,6 +15,7 @@ import {
 import { formatFileSize, formatRelativeTime, getFileIcon } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import type { Document } from '@/types'
+import toast from 'react-hot-toast'
 import {
   Upload,
   Trash2,
@@ -24,19 +25,71 @@ import {
   Loader2,
   FolderOpen,
   AlertCircle,
+  CheckCircle2,
 } from 'lucide-react'
 
 export function DocumentsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+  const [previousStatuses, setPreviousStatuses] = useState<Record<string, string>>({})
 
-  const { data: documents, isLoading, refetch } = useDocuments()
+  // Check if any document is processing to enable auto-polling
+  const { data: documents, isLoading, refetch } = useDocuments(20, 0, false)
+
+  // Track processing documents for auto-polling
+  const hasProcessingDocs = useMemo(() =>
+    documents?.some((doc: Document) =>
+      doc.processing_status === 'processing' || doc.processing_status === 'pending'
+    ) ?? false,
+    [documents]
+  )
+
+  // Use separate hook with polling when there are processing documents
+  const { data: polledDocuments } = useDocuments(20, 0, hasProcessingDocs)
+  const activeDocuments = hasProcessingDocs ? polledDocuments : documents
+
+  // Detect when processing completes and show notification
+  useEffect(() => {
+    if (!activeDocuments) return
+
+    activeDocuments.forEach((doc: Document) => {
+      const prevStatus = previousStatuses[doc.document_id]
+
+      // Notify when status changes from processing/pending to completed
+      if (prevStatus &&
+          (prevStatus === 'processing' || prevStatus === 'pending') &&
+          doc.processing_status === 'completed') {
+        toast.success(
+          `"${doc.title || doc.original_filename}" processed successfully! 🎉`,
+          { duration: 5000, icon: '✅' }
+        )
+      }
+
+      // Notify when processing fails
+      if (prevStatus &&
+          (prevStatus === 'processing' || prevStatus === 'pending') &&
+          doc.processing_status === 'failed') {
+        toast.error(
+          `"${doc.title || doc.original_filename}" processing failed`,
+          { duration: 5000 }
+        )
+      }
+    })
+
+    // Update previous statuses
+    const newStatuses: Record<string, string> = {}
+    activeDocuments.forEach((doc: Document) => {
+      newStatuses[doc.document_id] = doc.processing_status
+    })
+    setPreviousStatuses(newStatuses)
+  }, [activeDocuments])
+
   const uploadMutation = useUploadDocument()
   const deleteMutation = useDeleteDocument()
 
-  // Filter documents by search
-  const filteredDocuments = documents?.filter((doc: Document) =>
+  // Filter documents by search (use activeDocuments for real-time updates)
+  const filteredDocuments = activeDocuments?.filter((doc: Document) =>
     doc.original_filename.toLowerCase().includes(searchQuery.toLowerCase()) ||
     doc.title?.toLowerCase().includes(searchQuery.toLowerCase())
   ) || []
@@ -94,7 +147,13 @@ export function DocumentsPage() {
         <div>
           <h1 className="text-xl font-semibold text-white">Documents</h1>
           <p className="text-sm text-secondary-400">
-            {documents?.length || 0} document{documents?.length !== 1 ? 's' : ''} uploaded
+            {activeDocuments?.length || 0} document{activeDocuments?.length !== 1 ? 's' : ''} uploaded
+            {hasProcessingDocs && (
+              <span className="ml-2 inline-flex items-center gap-1 text-primary-400">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Processing...
+              </span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -224,79 +283,126 @@ function DocumentCard({
   isDeleting: boolean
 }) {
   const [showMenu, setShowMenu] = useState(false)
+  const isProcessing = document.processing_status === 'processing' || document.processing_status === 'pending'
+  const isCompleted = document.processing_status === 'completed'
 
   return (
-    <div className="group flex items-center gap-4 rounded-xl border border-secondary-700/50 bg-secondary-800/50 p-4 transition-colors hover:border-primary-500/30 hover:bg-secondary-800">
-      {/* Icon */}
-      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-secondary-700/50 text-2xl">
-        {getFileIcon(document.file_type)}
-      </div>
+    <div className={cn(
+      'group rounded-xl border bg-secondary-800/50 p-4 transition-all',
+      isProcessing
+        ? 'border-primary-500/50 bg-primary-900/20'
+        : isCompleted
+          ? 'border-secondary-700/50 hover:border-green-500/30 hover:bg-secondary-800'
+          : 'border-secondary-700/50 hover:border-primary-500/30 hover:bg-secondary-800'
+    )}>
+      <div className="flex items-center gap-4">
+        {/* Icon */}
+        <div className={cn(
+          'flex h-12 w-12 items-center justify-center rounded-lg text-2xl',
+          isProcessing ? 'bg-primary-800/50' : 'bg-secondary-700/50'
+        )}>
+          {isProcessing ? (
+            <Loader2 className="h-6 w-6 animate-spin text-primary-400" />
+          ) : isCompleted ? (
+            <span>{getFileIcon(document.file_type)}</span>
+          ) : (
+            <span>{getFileIcon(document.file_type)}</span>
+          )}
+        </div>
 
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <h3 className="font-medium text-white truncate">
-            {document.title || document.original_filename}
-          </h3>
-          <span
-            className={cn(
-              'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-              getDocumentStatusColor(document.processing_status)
-            )}
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="font-medium text-white truncate">
+              {document.title || document.original_filename}
+            </h3>
+            <span
+              className={cn(
+                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
+                getDocumentStatusColor(document.processing_status)
+              )}
+            >
+              {isProcessing && <Loader2 className="h-3 w-3 animate-spin" />}
+              {isCompleted && <CheckCircle2 className="h-3 w-3" />}
+              {getDocumentStatusLabel(document.processing_status)}
+            </span>
+          </div>
+          <div className="mt-1 flex items-center gap-3 text-sm text-secondary-400">
+            <span>{formatFileSize(document.file_size_bytes)}</span>
+            <span>•</span>
+            <span>{document.total_chunks} chunks</span>
+            <span>•</span>
+            <span>{formatRelativeTime(document.created_at)}</span>
+          </div>
+          {document.processing_error && (
+            <p className="mt-1 flex items-center gap-1 text-sm text-red-400">
+              <AlertCircle className="h-4 w-4" />
+              {document.processing_error}
+            </p>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="relative">
+          <button
+            onClick={() => setShowMenu(!showMenu)}
+            className="rounded-lg p-2 text-secondary-400 hover:bg-secondary-700 hover:text-white"
           >
-            {getDocumentStatusLabel(document.processing_status)}
-          </span>
+            <MoreVertical className="h-5 w-5" />
+          </button>
+
+          {showMenu && (
+            <>
+              <div
+                className="fixed inset-0 z-10"
+                onClick={() => setShowMenu(false)}
+              />
+              <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-lg border border-secondary-700 bg-secondary-800 py-1 shadow-lg">
+                <button
+                  onClick={() => {
+                    setShowMenu(false)
+                    onDelete()
+                  }}
+                  disabled={isDeleting}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/20 disabled:opacity-50"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                  Delete
+                </button>
+              </div>
+            </>
+          )}
         </div>
-        <div className="mt-1 flex items-center gap-3 text-sm text-secondary-400">
-          <span>{formatFileSize(document.file_size_bytes)}</span>
-          <span>•</span>
-          <span>{document.total_chunks} chunks</span>
-          <span>•</span>
-          <span>{formatRelativeTime(document.created_at)}</span>
-        </div>
-        {document.processing_error && (
-          <p className="mt-1 flex items-center gap-1 text-sm text-red-400">
-            <AlertCircle className="h-4 w-4" />
-            {document.processing_error}
-          </p>
-        )}
       </div>
 
-      {/* Actions */}
-      <div className="relative">
-        <button
-          onClick={() => setShowMenu(!showMenu)}
-          className="rounded-lg p-2 text-secondary-400 hover:bg-secondary-700 hover:text-white"
-        >
-          <MoreVertical className="h-5 w-5" />
-        </button>
-
-        {showMenu && (
-          <>
+      {/* Processing Progress Bar */}
+      {isProcessing && (
+        <div className="mt-3 pt-3 border-t border-primary-500/20">
+          <div className="flex items-center justify-between text-xs text-primary-300 mb-2">
+            <span>Processing document...</span>
+            <span className="flex items-center gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Please wait
+            </span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-primary-800/50">
             <div
-              className="fixed inset-0 z-10"
-              onClick={() => setShowMenu(false)}
+              className="h-full bg-gradient-to-r from-primary-500 to-violet-500 animate-pulse"
+              style={{ width: '100%' }}
             />
-            <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-lg border border-secondary-700 bg-secondary-800 py-1 shadow-lg">
-              <button
-                onClick={() => {
-                  setShowMenu(false)
-                  onDelete()
-                }}
-                disabled={isDeleting}
-                className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/20 disabled:opacity-50"
-              >
-                {isDeleting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Trash2 className="h-4 w-4" />
-                )}
-                Delete
-              </button>
-            </div>
-          </>
-        )}
-      </div>
+          </div>
+          <div className="mt-2 flex justify-between text-[10px] text-primary-400/70">
+            <span>Extracting</span>
+            <span>Chunking</span>
+            <span>Embedding</span>
+            <span>Storing</span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
