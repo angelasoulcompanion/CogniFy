@@ -140,7 +140,7 @@ class PromptTemplates:
         },
     }
 
-    # Structured JSON prompt for RAG (English)
+    # RAG prompt (English) - Markdown format
     SYSTEM_RAG = """{{expert_role}}
 
 Below is relevant context from the user's documents. Answer the question using this context.
@@ -149,58 +149,37 @@ Below is relevant context from the user's documents. Answer the question using t
 {context}
 --- END CONTEXT ---
 
-CRITICAL: You MUST respond in valid JSON format only. No markdown, no plain text.
+INSTRUCTIONS:
+1. Response language: {response_language}. DO NOT use Chinese characters.
+2. Use Markdown formatting for clear, structured responses.
+3. Always cite sources using [Source X] notation.
+4. If information is not in the context, say so clearly.
 
-Response language: {response_language}. DO NOT use Chinese characters.
+FORMATTING GUIDELINES:
+- Use ## for main headings
+- Use ### for subheadings
+- Use **bold** for key terms and important values
+- Use bullet points (-) for lists
+- Use tables when comparing data
+- Keep paragraphs concise
 
-JSON SCHEMA:
-{{
-  "title": "Brief summary title",
-  "sections": [
-    {{
-      "heading": "Section heading",
-      "items": [
-        {{"type": "text", "text": "Paragraph of explanation"}},
-        {{"type": "fact", "label": "Key metric", "value": "123,456"}},
-        {{"type": "list_item", "text": "A bullet point item"}}
-      ]
-    }}
-  ],
-  "sources_used": [1, 2]
-}}
+EXAMPLE RESPONSE:
+## Revenue Summary 2023
 
-ITEM TYPES:
-- "text": For paragraphs/explanations
-- "fact": For key-value data (label + value)
-- "list_item": For bullet points
+### Total Revenue
+- **Total Revenue**: $5.2 million
+- **Domestic**: 85%
+- **International**: 15%
 
-EXAMPLE:
-{{
-  "title": "Revenue Summary 2023",
-  "sections": [
-    {{
-      "heading": "Total Revenue",
-      "items": [
-        {{"type": "fact", "label": "Total Revenue", "value": "$5.2 million"}},
-        {{"type": "fact", "label": "Domestic", "value": "85%"}},
-        {{"type": "fact", "label": "International", "value": "15%"}}
-      ]
-    }},
-    {{
-      "heading": "Growth Analysis",
-      "items": [
-        {{"type": "text", "text": "Revenue increased by 12% compared to last year."}},
-        {{"type": "list_item", "text": "Previous year: $4.6 million"}},
-        {{"type": "list_item", "text": "Current year: $5.2 million"}}
-      ]
-    }}
-  ],
-  "sources_used": [1, 2]
-}}
+### Growth Analysis
+Revenue increased by 12% compared to last year [Source 1].
 
-Respond with ONLY valid JSON. No text before or after."""
+- Previous year: $4.6 million
+- Current year: $5.2 million
 
-    # Structured JSON prompt for RAG (Thai)
+The growth was primarily driven by domestic sales expansion [Source 2]."""
+
+    # RAG prompt (Thai) - Markdown format
     SYSTEM_RAG_THAI = """{{expert_role}}
 
 ด้านล่างนี้คือบริบทจากเอกสาร ใช้ตอบคำถาม
@@ -209,56 +188,34 @@ Respond with ONLY valid JSON. No text before or after."""
 {context}
 --- จบบริบท ---
 
-สำคัญมาก: ตอบเป็น JSON เท่านั้น ห้ามตอบเป็น markdown หรือข้อความธรรมดา
+คำแนะนำ:
+1. ตอบเป็นภาษาไทย ห้ามใช้ภาษาจีน
+2. ใช้รูปแบบ Markdown เพื่อความชัดเจน
+3. อ้างอิงแหล่งที่มาด้วย [แหล่งที่ X]
+4. ถ้าไม่พบข้อมูลในบริบท ให้บอกชัดเจน
 
-กฎภาษา: ตอบเป็นภาษาไทย ห้ามใช้ภาษาจีน
+แนวทางการจัดรูปแบบ:
+- ใช้ ## สำหรับหัวข้อหลัก
+- ใช้ ### สำหรับหัวข้อย่อย
+- ใช้ **ตัวหนา** สำหรับคำสำคัญและค่าสำคัญ
+- ใช้ bullet points (-) สำหรับรายการ
+- ใช้ตารางเมื่อเปรียบเทียบข้อมูล
 
-JSON SCHEMA:
-{{
-  "title": "หัวข้อสรุป",
-  "sections": [
-    {{
-      "heading": "หัวข้อส่วน",
-      "items": [
-        {{"type": "text", "text": "คำอธิบาย"}},
-        {{"type": "fact", "label": "ชื่อข้อมูล", "value": "ค่า"}},
-        {{"type": "list_item", "text": "รายการ"}}
-      ]
-    }}
-  ],
-  "sources_used": [1, 2]
-}}
+ตัวอย่างการตอบ:
+## สรุปรายได้ปี 2567
 
-ประเภท item:
-- "text": สำหรับย่อหน้าอธิบาย
-- "fact": สำหรับข้อมูลคู่ (label + value)
-- "list_item": สำหรับรายการ bullet
+### รายได้รวม
+- **รายได้รวม**: 539 ล้านบาท
+- **รายได้ในประเทศ**: 100%
+- **รายได้ต่างประเทศ**: ไม่มี
 
-ตัวอย่าง:
-{{
-  "title": "สรุปรายได้ปี 2567",
-  "sections": [
-    {{
-      "heading": "รายได้รวม",
-      "items": [
-        {{"type": "fact", "label": "รายได้รวม", "value": "539 ล้านบาท"}},
-        {{"type": "fact", "label": "รายได้ในประเทศ", "value": "100%"}},
-        {{"type": "fact", "label": "รายได้ต่างประเทศ", "value": "ไม่มี"}}
-      ]
-    }},
-    {{
-      "heading": "การเติบโต",
-      "items": [
-        {{"type": "text", "text": "รายได้ลดลง 16.6% เมื่อเทียบกับปีก่อน"}},
-        {{"type": "list_item", "text": "ปีก่อน: 646 ล้านบาท"}},
-        {{"type": "list_item", "text": "ปีนี้: 539 ล้านบาท"}}
-      ]
-    }}
-  ],
-  "sources_used": [1, 2]
-}}
+### การเติบโต
+รายได้ลดลง 16.6% เมื่อเทียบกับปีก่อน [แหล่งที่ 1]
 
-ตอบเป็น JSON เท่านั้น ห้ามมีข้อความอื่นก่อนหรือหลัง"""
+- ปีก่อน: 646 ล้านบาท
+- ปีนี้: 539 ล้านบาท
+
+การลดลงเกิดจากสภาพเศรษฐกิจชะลอตัว [แหล่งที่ 2]"""
 
     SYSTEM_NO_CONTEXT = """{{expert_role}}
 
@@ -851,17 +808,8 @@ class ChatService:
                 if chunk.is_done:
                     break
 
-            # Parse as structured JSON response
-            structured_data = PromptTemplates.parse_structured_response(full_content)
-
-            # Convert back to markdown for storage
-            markdown_content = PromptTemplates.structured_to_markdown(structured_data)
-
-            # Send structured response for frontend to render
-            yield StreamEvent(
-                event_type="structured_response",
-                data={"structured": structured_data}
-            )
+            # Fix markdown formatting for better display
+            full_content = PromptTemplates.fix_markdown_formatting(full_content)
 
             # Format and send sources
             source_dicts = self._format_sources(sources)
@@ -871,21 +819,21 @@ class ChatService:
                     data={"sources": source_dicts}
                 )
 
-            # Add assistant message (store markdown version)
+            # Add assistant message
             assistant_msg = conversation.add_message(
                 MessageRole.ASSISTANT,
-                markdown_content,
+                full_content,
                 sources=source_dicts,
             )
 
             response_time = int((time.time() - start_time) * 1000)
             assistant_msg.response_time_ms = response_time
 
-            # Persist assistant message to database (markdown version)
+            # Persist assistant message to database
             await self.conversation_repo.add_message(
                 conversation_id=conversation.conversation_id,
                 message_type="assistant",
-                content=markdown_content,
+                content=full_content,
                 sources_used=source_dicts if source_dicts else None,
                 response_time_ms=response_time,
             )

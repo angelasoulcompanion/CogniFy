@@ -12,10 +12,20 @@ import { ChatPage } from '@/pages/ChatPage'
 import { DocumentsPage } from '@/pages/DocumentsPage'
 import { ConnectorsPage } from '@/pages/ConnectorsPage'
 import { AdminPage } from '@/pages/AdminPage'
+import { PromptsPage } from '@/pages/PromptsPage'
 
 // Protected Route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, _hasHydrated } = useAuth()
+
+  // Wait for hydration before checking auth
+  if (!_hasHydrated) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-secondary-950">
+        <div className="text-primary-400">Loading...</div>
+      </div>
+    )
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
@@ -45,6 +55,7 @@ function App() {
         <Route path="documents" element={<DocumentsPage />} />
         <Route path="connectors" element={<ConnectorsPage />} />
         <Route path="admin" element={<AdminPage />} />
+        <Route path="prompts" element={<PromptsPage />} />
       </Route>
 
       {/* Catch all */}

@@ -3,7 +3,7 @@
  * Secure Token Management with HttpOnly Cookies
  *
  * Security Features:
- * - Access token in memory/localStorage (short-lived)
+ * - Access token in memory/sessionStorage (short-lived, cleared on browser close)
  * - Refresh token in HttpOnly cookie (XSS protected)
  * - Auto token refresh before expiry
  * - Automatic retry on 401
@@ -16,7 +16,7 @@ import toast from 'react-hot-toast'
 
 const API_BASE_URL = '/api'
 
-// Token storage keys (only access token in localStorage now)
+// Token storage keys (only access token in sessionStorage now)
 const TOKEN_KEY = 'token'
 const TOKEN_EXPIRY_KEY = 'tokenExpiry'
 const USER_KEY = 'user'
@@ -47,25 +47,25 @@ const isTokenExpired = (expiry: number | null): boolean => {
   return Date.now() >= expiry - bufferMs
 }
 
-// Helper: Save access token to localStorage
+// Helper: Save access token to sessionStorage
 export const saveAccessToken = (accessToken: string, expiresIn: number) => {
-  localStorage.setItem(TOKEN_KEY, accessToken)
+  sessionStorage.setItem(TOKEN_KEY, accessToken)
   const expiry = Date.now() + expiresIn * 1000
-  localStorage.setItem(TOKEN_EXPIRY_KEY, expiry.toString())
+  sessionStorage.setItem(TOKEN_EXPIRY_KEY, expiry.toString())
 }
 
 // Helper: Clear all auth data
 export const clearAuth = () => {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(TOKEN_EXPIRY_KEY)
-  localStorage.removeItem(USER_KEY)
+  sessionStorage.removeItem(TOKEN_KEY)
+  sessionStorage.removeItem(TOKEN_EXPIRY_KEY)
+  sessionStorage.removeItem(USER_KEY)
 }
 
 // Helper: Get stored tokens
 export const getTokens = () => ({
-  accessToken: localStorage.getItem(TOKEN_KEY),
-  expiry: localStorage.getItem(TOKEN_EXPIRY_KEY)
-    ? parseInt(localStorage.getItem(TOKEN_EXPIRY_KEY)!)
+  accessToken: sessionStorage.getItem(TOKEN_KEY),
+  expiry: sessionStorage.getItem(TOKEN_EXPIRY_KEY)
+    ? parseInt(sessionStorage.getItem(TOKEN_EXPIRY_KEY)!)
     : null,
 })
 
@@ -636,6 +636,94 @@ export const adminApi = {
   // Toggle user status
   toggleUserStatus: async (userId: string) => {
     const response = await api.put(`/v1/admin/users/${userId}/toggle-status`)
+    return response.data
+  },
+}
+
+// =============================================================================
+// PROMPTS API
+// =============================================================================
+
+import type {
+  PromptTemplate,
+  PromptListResponse,
+  CreatePromptRequest,
+  UpdatePromptRequest,
+  AIGenerateRequest,
+  AIGenerateResponse,
+  TemplateGuidesResponse,
+  PromptStatsResponse,
+  CategoriesResponse,
+} from '@/types/prompt'
+
+export const promptsApi = {
+  // List all prompts
+  list: async (params?: {
+    category?: string
+    expert_role?: string
+    is_active?: boolean
+    limit?: number
+    offset?: number
+  }): Promise<PromptListResponse> => {
+    const response = await api.get('/v1/prompts', { params })
+    return response.data
+  },
+
+  // Get prompt by ID
+  get: async (templateId: string): Promise<PromptTemplate> => {
+    const response = await api.get(`/v1/prompts/${templateId}`)
+    return response.data
+  },
+
+  // Create new prompt
+  create: async (data: CreatePromptRequest): Promise<PromptTemplate> => {
+    const response = await api.post('/v1/prompts', data)
+    return response.data
+  },
+
+  // Update prompt
+  update: async (templateId: string, data: UpdatePromptRequest): Promise<PromptTemplate> => {
+    const response = await api.put(`/v1/prompts/${templateId}`, data)
+    return response.data
+  },
+
+  // Delete prompt
+  delete: async (templateId: string): Promise<void> => {
+    await api.delete(`/v1/prompts/${templateId}`)
+  },
+
+  // Set as default
+  setDefault: async (templateId: string): Promise<void> => {
+    await api.post(`/v1/prompts/${templateId}/set-default`)
+  },
+
+  // Get template guides
+  getTemplateGuides: async (): Promise<TemplateGuidesResponse> => {
+    const response = await api.get('/v1/prompts/templates')
+    return response.data
+  },
+
+  // Get stats
+  getStats: async (): Promise<PromptStatsResponse> => {
+    const response = await api.get('/v1/prompts/stats')
+    return response.data
+  },
+
+  // Get categories and roles
+  getCategories: async (): Promise<CategoriesResponse> => {
+    const response = await api.get('/v1/prompts/categories')
+    return response.data
+  },
+
+  // AI generate prompt
+  aiGenerate: async (data: AIGenerateRequest): Promise<AIGenerateResponse> => {
+    const response = await api.post('/v1/prompts/ai-generate', data)
+    return response.data
+  },
+
+  // Render prompt with variables
+  render: async (templateId: string, variables: Record<string, string>): Promise<{ rendered: string }> => {
+    const response = await api.post(`/v1/prompts/${templateId}/render`, variables)
     return response.data
   },
 }

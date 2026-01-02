@@ -30,8 +30,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
-import type { ChatMessage, SourceReference, StructuredResponse } from '@/types'
-import { StructuredResponseRenderer, isStructuredResponse } from '@/components/chat/StructuredResponse'
+import type { ChatMessage, SourceReference } from '@/types'
 
 // Model options - match actual installed Ollama models
 const MODEL_OPTIONS = {
@@ -413,25 +412,16 @@ export function ChatPage() {
 }
 
 // =============================================================================
-// MESSAGE CONTENT COMPONENT (handles structured vs markdown)
+// MESSAGE CONTENT COMPONENT
 // =============================================================================
 
-function MessageContent({ content, isUser, isStreaming = false }: { content: string; isUser: boolean; isStreaming?: boolean }) {
+function MessageContent({ content, isUser }: { content: string; isUser: boolean }) {
   // User messages are always plain text
   if (isUser) {
     return <span>{content}</span>
   }
 
-  // During streaming: always show markdown (nice streaming experience)
-  // After streaming: try to parse as structured response first
-  if (!isStreaming) {
-    const structured = isStructuredResponse(content)
-    if (structured) {
-      return <StructuredResponseRenderer data={structured} />
-    }
-  }
-
-  // Show markdown (during streaming or as fallback)
+  // Assistant messages use markdown
   return (
     <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-purple-300 prose-strong:text-white prose-li:text-gray-300">
       <ReactMarkdown>{content}</ReactMarkdown>
@@ -478,24 +468,19 @@ function MessageBubble({ message }: { message: ChatMessage }) {
               : 'bg-secondary-800 text-secondary-200'
           )}
         >
-          {isStreaming && (!message.content || message.content.trim().startsWith('{')) ? (
-            // During streaming JSON: show progress steps
+          {isStreaming && !message.content ? (
+            // Show loading while waiting for first content
             <div className="flex items-center gap-3">
               <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
-              <div className="flex flex-col gap-1">
-                <span className="text-purple-300">
-                  {!message.content ? '🔍 กำลังค้นหาข้อมูล...' : '✨ กำลังสร้างคำตอบ...'}
-                </span>
-                <span className="text-xs text-gray-500">กรุณารอสักครู่</span>
-              </div>
+              <span className="text-purple-300">กำลังค้นหาข้อมูล...</span>
             </div>
           ) : (
-            <MessageContent content={message.content} isUser={isUser} isStreaming={isStreaming} />
+            <MessageContent content={message.content} isUser={isUser} />
           )}
         </div>
 
-        {/* Streaming indicator - hide for JSON streaming (already showing progress) */}
-        {isStreaming && message.content && !message.content.trim().startsWith('{') && (
+        {/* Streaming indicator */}
+        {isStreaming && message.content && (
           <div className="mt-2 flex items-center gap-2 text-sm text-secondary-500">
             <span className="flex gap-1">
               <span className="h-2 w-2 rounded-full bg-primary-500 animate-pulse-dot"></span>

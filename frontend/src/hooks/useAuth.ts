@@ -10,7 +10,7 @@
  */
 
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import { authApi, saveAccessToken, clearAuth } from '@/services/api'
 import type { User } from '@/types'
 import toast from 'react-hot-toast'
@@ -20,11 +20,13 @@ interface AuthState {
   token: string | null
   isAuthenticated: boolean
   isLoading: boolean
+  _hasHydrated: boolean
   login: (username: string, password: string) => Promise<boolean>
   logout: () => Promise<void>
   logoutAll: () => Promise<void>
   setUser: (user: User) => void
   checkAuth: () => Promise<boolean>
+  setHasHydrated: (state: boolean) => void
 }
 
 export const useAuth = create<AuthState>()(
@@ -34,6 +36,8 @@ export const useAuth = create<AuthState>()(
       token: null,
       isAuthenticated: false,
       isLoading: false,
+      _hasHydrated: false,
+      setHasHydrated: (state: boolean) => set({ _hasHydrated: state }),
 
       login: async (username: string, password: string) => {
         set({ isLoading: true })
@@ -50,8 +54,8 @@ export const useAuth = create<AuthState>()(
             isLoading: false,
           })
 
-          // Also store token in localStorage for API interceptor
-          localStorage.setItem('token', response.access_token)
+          // Also store token in sessionStorage for API interceptor
+          sessionStorage.setItem('token', response.access_token)
 
           toast.success(`Welcome back, ${response.user.full_name || response.user.email}!`)
           return true
@@ -84,7 +88,7 @@ export const useAuth = create<AuthState>()(
           isAuthenticated: false,
         })
 
-        // Clear all auth data from localStorage
+        // Clear all auth data from sessionStorage
         clearAuth()
         toast.success('Logged out successfully')
       },
@@ -130,11 +134,15 @@ export const useAuth = create<AuthState>()(
     }),
     {
       name: 'cognify-auth',
+      storage: createJSONStorage(() => sessionStorage),
       partialize: (state) => ({
         user: state.user,
         token: state.token,
         isAuthenticated: state.isAuthenticated,
-      }),
+      }) as AuthState,
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true)
+      },
     }
   )
 )

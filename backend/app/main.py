@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.infrastructure.database import Database
-from app.api.v1 import auth, documents, chat, search, connectors, admin
+from app.api.v1 import auth, documents, chat, search, connectors, admin, prompts
 from app.services.embedding_service import get_embedding_service, shutdown_embedding_service
 from app.services.llm_service import shutdown_llm_service
 
@@ -58,6 +58,7 @@ app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
 app.include_router(search.router, prefix="/api/v1/search", tags=["Search"])
 app.include_router(connectors.router, prefix="/api/v1", tags=["Connectors"])
 app.include_router(admin.router, prefix="/api/v1", tags=["Admin"])
+app.include_router(prompts.router, prefix="/api/v1", tags=["Prompts"])
 
 
 @app.get("/", tags=["Health"])

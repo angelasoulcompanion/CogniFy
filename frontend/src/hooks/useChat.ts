@@ -14,7 +14,6 @@ import type {
   SourceReference,
   RAGSettings,
   SSEEvent,
-  StructuredResponse,
 } from '@/types'
 import toast from 'react-hot-toast'
 
@@ -91,7 +90,6 @@ export function useChat(options: UseChatOptions = {}) {
 
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamingContent, setStreamingContent] = useState('')
-  const [structuredResponse, setStructuredResponse] = useState<StructuredResponse | null>(null)
   const [sources, setSources] = useState<SourceReference[]>([])
   const abortRef = useRef<(() => void) | null>(null)
 
@@ -126,7 +124,6 @@ export function useChat(options: UseChatOptions = {}) {
 
     setIsStreaming(true)
     setStreamingContent('')
-    setStructuredResponse(null)
     setSources([])
     setLoading(true)
 
@@ -171,17 +168,6 @@ export function useChat(options: UseChatOptions = {}) {
               setStreamingContent(fullContent)
               updateMessage(assistantMessageId, {
                 content: fullContent,
-              })
-              break
-
-            case 'structured_response':
-              // Structured JSON response from backend
-              setStructuredResponse(event.structured)
-              // Also update message content for display
-              updateMessage(assistantMessageId, {
-                content: JSON.stringify(event.structured),
-                // @ts-expect-error - adding structured field
-                structured: event.structured,
               })
               break
 
@@ -292,7 +278,6 @@ export function useChat(options: UseChatOptions = {}) {
     isStreaming,
     isLoading,
     streamingContent,
-    structuredResponse,
     sources,
     sendMessage,
     stopStreaming,

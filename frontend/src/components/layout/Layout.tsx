@@ -16,6 +16,7 @@ import {
   Menu,
   X,
   Shield,
+  Wand2,
 } from 'lucide-react'
 
 export function Layout() {
@@ -32,8 +33,11 @@ export function Layout() {
     { to: '/chat', icon: MessageSquare, label: 'Chat' },
     { to: '/documents', icon: FileText, label: 'Documents' },
     { to: '/connectors', icon: Database, label: 'Connectors' },
-    // Admin link only for admin users
-    ...(user?.role === 'admin' ? [{ to: '/admin', icon: Shield, label: 'Admin' }] : []),
+    // Admin links only for admin users
+    ...(user?.role === 'admin' ? [
+      { to: '/prompts', icon: Wand2, label: 'Prompts' },
+      { to: '/admin', icon: Shield, label: 'Admin' },
+    ] : []),
   ]
 
   return (
