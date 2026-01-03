@@ -26,6 +26,75 @@ class TextExtractor:
     """Extract text from various document formats"""
 
     @staticmethod
+    def _fix_missing_spaces(text: str) -> str:
+        """
+        Fix missing spaces in extracted PDF text.
+
+        Some PDFs (especially from slides or certain exporters) have text that
+        looks fine visually but has no spaces when extracted.
+
+        Examples:
+            "HowNeuralNetworksWork" → "How Neural Networks Work"
+            "1.Introduction" → "1. Introduction"
+            "ฝึกencoderและdecoder" → "ฝึก encoder และ decoder"
+        """
+        import re
+
+        if not text:
+            return text
+
+        # Thai character range: \u0E00-\u0E7F
+
+        # 1. Add space between Thai and English (Thai followed by English letter)
+        # "ฝึกencoder" → "ฝึก encoder"
+        text = re.sub(r'([\u0E00-\u0E7F])([A-Za-z])', r'\1 \2', text)
+
+        # 2. Add space between English and Thai (English letter followed by Thai)
+        # "encoderและ" → "encoder และ"
+        text = re.sub(r'([A-Za-z])([\u0E00-\u0E7F])', r'\1 \2', text)
+
+        # 3. Add space before capital letters that follow lowercase (camelCase fix)
+        # "HowNeural" → "How Neural"
+        text = re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
+
+        # 4. Add space after numbers followed by letters (except common patterns)
+        # "1Introduction" → "1 Introduction" but keep "3D", "AI", "2x"
+        text = re.sub(r'(\d)([A-Za-z])(?![A-Z0-9]|x\b|D\b)', r'\1 \2', text)
+
+        # 5. Add space after numbers followed by Thai
+        # "1.เริ่มต้น" → "1. เริ่มต้น"
+        text = re.sub(r'(\d\.?)([\u0E00-\u0E7F])', r'\1 \2', text)
+
+        # 6. Add space after period followed by capital letter (sentence boundary)
+        # "end.Start" → "end. Start"
+        text = re.sub(r'\.([A-Z])', r'. \1', text)
+
+        # 7. Add space after common abbreviations without space
+        # "e.g.This" → "e.g. This", "i.e.The" → "i.e. The"
+        text = re.sub(r'(e\.g\.|i\.e\.|etc\.)([A-Z])', r'\1 \2', text)
+
+        # 8. Fix numbered lists without spaces
+        # "1.How" → "1. How"
+        text = re.sub(r'^(\d+\.)([A-Za-z])', r'\1 \2', text, flags=re.MULTILINE)
+
+        # 9. Add space after closing parenthesis followed by letter/Thai
+        # ")The" → ") The", ")และ" → ") และ"
+        text = re.sub(r'\)([A-Za-z\u0E00-\u0E7F])', r') \1', text)
+
+        # 10. Add space before opening parenthesis preceded by letter/Thai
+        # "text(note" → "text (note"
+        text = re.sub(r'([a-z\u0E00-\u0E7F])\(', r'\1 (', text)
+
+        # 11. Add space after colon followed by number or letter (for lists)
+        # "ดังนี้:1" → "ดังนี้: 1"
+        text = re.sub(r':(\d)', r': \1', text)
+
+        # 12. Clean up any double/triple spaces created
+        text = re.sub(r'  +', ' ', text)
+
+        return text
+
+    @staticmethod
     async def extract_pdf(file_path: str) -> Tuple[str, int, List[Tuple[int, str]]]:
         """
         Extract text from PDF using PyMuPDF.
@@ -68,6 +137,8 @@ class TextExtractor:
                 for page_num in range(total_pages):
                     page = doc[page_num]
                     text = page.get_text("text").strip()
+                    # Fix missing spaces from problematic PDFs
+                    text = TextExtractor._fix_missing_spaces(text)
                     pages.append((page_num + 1, text))
                     full_text_parts.append(text)
 

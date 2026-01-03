@@ -40,6 +40,7 @@ from app.infrastructure.repositories.conversation_repository import (
     get_conversation_repository,
     ConversationRepository,
 )
+from app.services.prompt_service import get_prompt_service
 
 
 # =============================================================================
@@ -107,6 +108,17 @@ STRUCTURED_RESPONSE_SCHEMA = {
 
 class PromptTemplates:
     """RAG prompt templates with strong language enforcement and expert roles"""
+
+    # Map frontend expert names to database expert_role values
+    EXPERT_ROLE_MAP = {
+        "general": "general",
+        "financial_analyst": "financial",
+        "legal_expert": "legal",
+        "technical_writer": "technical",
+        "data_analyst": "data",
+        "business_consultant": "business",
+        "researcher": "researcher",
+    }
 
     # Expert role definitions
     EXPERT_ROLES = {
@@ -356,6 +368,50 @@ Be helpful, accurate, and concise."""
         text = re.sub(r' +\n', '\n', text)
 
         return text.strip()
+
+    @classmethod
+    def fix_thai_english_spacing(cls, text: str) -> str:
+        """
+        Fix missing spaces between Thai and English text in LLM output.
+
+        LLMs often generate Thai-English mixed text without proper spacing:
+        - "VariationalAutoencodersเป็นโมเดล" → "Variational Autoencoders เป็นโมเดล"
+        - "ใช้neuralnetwork" → "ใช้ neural network"
+        """
+        if not text:
+            return text
+
+        import re
+        original = text
+
+        # Thai character range: \u0E00-\u0E7F
+
+        # 1. Add space between Thai and English (Thai followed by English letter)
+        text = re.sub(r'([\u0E00-\u0E7F])([A-Za-z])', r'\1 \2', text)
+
+        # 2. Add space between English and Thai (English letter followed by Thai)
+        text = re.sub(r'([A-Za-z])([\u0E00-\u0E7F])', r'\1 \2', text)
+
+        # 3. Add space before capital letters in CamelCase (English)
+        text = re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
+
+        # 4. Add space after numbers followed by Thai
+        text = re.sub(r'(\d\.?)([\u0E00-\u0E7F])', r'\1 \2', text)
+
+        # 5. Add space after closing parenthesis followed by Thai
+        text = re.sub(r'\)([\u0E00-\u0E7F])', r') \1', text)
+
+        # 6. Add space before opening parenthesis preceded by Thai
+        text = re.sub(r'([\u0E00-\u0E7F])\(', r'\1 (', text)
+
+        # 7. Clean up double/triple spaces
+        text = re.sub(r'  +', ' ', text)
+
+        # Debug log
+        if text != original and len(original) > 20:
+            print(f"🔧 Thai-English spacing fixed: {len(original)} -> {len(text)} chars")
+
+        return text
 
     @classmethod
     def parse_structured_response(cls, text: str) -> Dict[str, Any]:
@@ -660,7 +716,7 @@ class ChatService:
             )
 
         # Build messages with question for language detection and expert role
-        messages = self._build_messages(conversation, context, question=request.message, expert=request.expert)
+        messages = await self._build_messages(conversation, context, question=request.message, expert=request.expert)
 
         # Get LLM config
         config = self._get_llm_config(request.provider, request.model)
@@ -787,29 +843,50 @@ class ChatService:
                 )
 
             # Build messages with question for language detection and expert role
-            messages = self._build_messages(conversation, context, question=request.message, expert=request.expert)
+            messages = await self._build_messages(conversation, context, question=request.message, expert=request.expert)
 
             # Get LLM config
             config = self._get_llm_config(request.provider, request.model)
 
-            # Stream response
+            # Stream response with buffering for Thai-English spacing fix
             full_content = ""
+            buffer = ""
+            BUFFER_SIZE = 15  # Small buffer for responsiveness, still catches most boundaries
+
             async for chunk in self.llm_service.stream(messages, config):
                 if chunk.content:
                     # Filter Chinese characters from each chunk
                     filtered_chunk = PromptTemplates.filter_chinese(chunk.content)
-                    if filtered_chunk:  # Only send if content remains after filtering
-                        full_content += filtered_chunk
-                        yield StreamEvent(
-                            event_type="content",
-                            data={"content": filtered_chunk}
-                        )
+                    buffer += filtered_chunk
+
+                    # Send when buffer is large enough or contains sentence end
+                    if len(buffer) >= BUFFER_SIZE or buffer.endswith(('.', '。', '\n', ':', ')')):
+                        # Fix Thai-English spacing on buffered content
+                        fixed_buffer = PromptTemplates.fix_thai_english_spacing(buffer)
+                        if fixed_buffer:
+                            full_content += fixed_buffer
+                            yield StreamEvent(
+                                event_type="content",
+                                data={"content": fixed_buffer}
+                            )
+                        buffer = ""
 
                 if chunk.is_done:
+                    # Send remaining buffer
+                    if buffer:
+                        fixed_buffer = PromptTemplates.fix_thai_english_spacing(buffer)
+                        if fixed_buffer:
+                            full_content += fixed_buffer
+                            yield StreamEvent(
+                                event_type="content",
+                                data={"content": fixed_buffer}
+                            )
                     break
 
             # Fix markdown formatting for better display
             full_content = PromptTemplates.fix_markdown_formatting(full_content)
+            # Also fix Thai-English spacing on full content (for proper storage)
+            full_content = PromptTemplates.fix_thai_english_spacing(full_content)
 
             # Format and send sources
             source_dicts = self._format_sources(sources)
@@ -974,7 +1051,7 @@ class ChatService:
     # HELPER METHODS
     # =========================================================================
 
-    def _build_messages(
+    async def _build_messages(
         self,
         conversation: Conversation,
         context: str,
@@ -982,14 +1059,55 @@ class ChatService:
         expert: str = "general",
         max_history: int = 10,
     ) -> List[Message]:
-        """Build message list for LLM with proper language detection and expert role"""
-        messages = []
+        """Build message list for LLM with proper language detection and expert role.
 
-        # Add system prompt with language detection and expert role
-        if context:
-            system_prompt = PromptTemplates.get_rag_prompt(context, question=question, expert=expert)
-        else:
-            system_prompt = PromptTemplates.get_no_context_prompt(question=question, expert=expert)
+        Tries to use database prompts first, falls back to hardcoded templates.
+        """
+        messages = []
+        system_prompt = None
+
+        # Map frontend expert name to database expert_role
+        db_expert_role = PromptTemplates.EXPERT_ROLE_MAP.get(expert, "general")
+
+        # Try to get prompt from database first
+        try:
+            prompt_service = get_prompt_service()
+
+            if context:
+                # Try RAG prompt from database
+                db_prompt = await prompt_service.get_default_prompt(
+                    category="rag",
+                    expert_role=db_expert_role
+                )
+                if db_prompt:
+                    # Render prompt with context and query variables
+                    system_prompt = db_prompt.render({
+                        "context": context,
+                        "query": question,  # Some templates use {query}
+                    })
+                    # Increment usage count
+                    await prompt_service.increment_usage(db_prompt.template_id)
+                    print(f"📝 Using DB prompt: {db_prompt.name} (expert: {db_expert_role})")
+            else:
+                # Try system prompt from database (no context)
+                db_prompt = await prompt_service.get_default_prompt(
+                    category="system",
+                    expert_role=db_expert_role
+                )
+                if db_prompt:
+                    system_prompt = db_prompt.render({})
+                    await prompt_service.increment_usage(db_prompt.template_id)
+                    print(f"📝 Using DB prompt: {db_prompt.name}")
+        except Exception as e:
+            print(f"⚠️ Failed to get DB prompt, using hardcoded: {e}")
+
+        # Fallback to hardcoded prompts if database prompt not found
+        if not system_prompt:
+            if context:
+                system_prompt = PromptTemplates.get_rag_prompt(context, question=question, expert=expert)
+            else:
+                system_prompt = PromptTemplates.get_no_context_prompt(question=question, expert=expert)
+            print(f"📝 Using hardcoded prompt (expert: {expert})")
 
         messages.append(Message(role=MessageRole.SYSTEM, content=system_prompt))
 
