@@ -9,7 +9,7 @@ import asyncpg
 
 from app.infrastructure.repositories.base_repository import BaseRepository
 from app.infrastructure.database import Database
-from app.domain.entities.document import Document, DocumentChunk, ProcessingStatus, FileType
+from app.domain.entities.document import Document, DocumentChunk, ProcessingStatus, ProcessingStep, FileType
 
 
 class DocumentRepository(BaseRepository[Document]):
@@ -24,6 +24,11 @@ class DocumentRepository(BaseRepository[Document]):
             status = ProcessingStatus(row["processing_status"])
         except ValueError:
             status = ProcessingStatus.PENDING
+
+        try:
+            step = ProcessingStep(row.get("processing_step", "pending"))
+        except (ValueError, TypeError):
+            step = ProcessingStep.PENDING
 
         try:
             file_type = FileType(row["file_type"])
@@ -44,6 +49,8 @@ class DocumentRepository(BaseRepository[Document]):
             language=row.get("language", "th"),
             tags=row.get("tags") or [],
             processing_status=status,
+            processing_step=step,
+            processing_progress=row.get("processing_progress", 0) or 0,
             processing_error=row.get("processing_error"),
             total_chunks=row.get("total_chunks", 0),
             is_deleted=row.get("is_deleted", False),
@@ -67,6 +74,8 @@ class DocumentRepository(BaseRepository[Document]):
             "language": entity.language,
             "tags": entity.tags,
             "processing_status": entity.processing_status.value,
+            "processing_step": entity.processing_step.value if entity.processing_step else "pending",
+            "processing_progress": entity.processing_progress,
             "processing_error": entity.processing_error,
             "total_chunks": entity.total_chunks,
             "is_deleted": entity.is_deleted,
@@ -212,6 +221,23 @@ class DocumentRepository(BaseRepository[Document]):
             """
             result = await Database.fetchval(query, doc_id, status.value)
 
+        return result is not None
+
+    async def update_progress(
+        self,
+        document_id: UUID,
+        step: ProcessingStep,
+        progress: int
+    ) -> bool:
+        """Update document processing step and progress"""
+        doc_id = document_id if isinstance(document_id, UUID) else UUID(str(document_id))
+        query = """
+            UPDATE documents
+            SET processing_step = $2, processing_progress = $3
+            WHERE document_id = $1
+            RETURNING document_id
+        """
+        result = await Database.fetchval(query, doc_id, step.value, progress)
         return result is not None
 
     async def soft_delete(self, document_id: UUID) -> bool:

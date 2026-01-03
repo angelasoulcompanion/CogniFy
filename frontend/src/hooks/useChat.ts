@@ -6,6 +6,7 @@
 
 import { useState, useCallback, useRef } from 'react'
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import { chatApi } from '@/services/api'
 import { streamChat } from '@/services/sse'
 import type {
@@ -35,26 +36,38 @@ interface ChatStore {
   clearMessages: () => void
 }
 
-export const useChatStore = create<ChatStore>((set) => ({
-  conversations: [],
-  currentConversation: null,
-  messages: [],
-  isLoading: false,
+export const useChatStore = create<ChatStore>()(
+  persist(
+    (set) => ({
+      conversations: [],
+      currentConversation: null,
+      messages: [],
+      isLoading: false,
 
-  setConversations: (conversations) => set({ conversations }),
-  setCurrentConversation: (conversation) => set({ currentConversation: conversation }),
-  setMessages: (messages) => set({ messages }),
-  addMessage: (message) => set((state) => ({
-    messages: [...state.messages, message],
-  })),
-  updateMessage: (messageId, updates) => set((state) => ({
-    messages: state.messages.map((m) =>
-      m.message_id === messageId ? { ...m, ...updates } : m
-    ),
-  })),
-  setLoading: (isLoading) => set({ isLoading }),
-  clearMessages: () => set({ messages: [] }),
-}))
+      setConversations: (conversations) => set({ conversations }),
+      setCurrentConversation: (conversation) => set({ currentConversation: conversation }),
+      setMessages: (messages) => set({ messages }),
+      addMessage: (message) => set((state) => ({
+        messages: [...state.messages, message],
+      })),
+      updateMessage: (messageId, updates) => set((state) => ({
+        messages: state.messages.map((m) =>
+          m.message_id === messageId ? { ...m, ...updates } : m
+        ),
+      })),
+      setLoading: (isLoading) => set({ isLoading }),
+      clearMessages: () => set({ messages: [] }),
+    }),
+    {
+      name: 'cognify-chat',
+      storage: createJSONStorage(() => sessionStorage),
+      partialize: (state) => ({
+        messages: state.messages,
+        currentConversation: state.currentConversation,
+      }),
+    }
+  )
+)
 
 // =============================================================================
 // CHAT HOOK

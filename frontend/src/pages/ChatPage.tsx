@@ -138,6 +138,15 @@ export function ChatPage() {
     expert: selectedExpert.value,
   })
 
+  // Cleanup: abort streaming when navigating away
+  useEffect(() => {
+    return () => {
+      if (isStreaming) {
+        stopStreaming()
+      }
+    }
+  }, [isStreaming, stopStreaming])
+
   // Clear chat handler
   const handleClearChat = () => {
     if (messages.length > 0 && !isStreaming) {
@@ -415,16 +424,100 @@ export function ChatPage() {
 // MESSAGE CONTENT COMPONENT
 // =============================================================================
 
+// Pre-process markdown to fix common LLM formatting issues
+function preprocessMarkdown(text: string): string {
+  let processed = text
+
+  // Step 1: Fix numbered list items stuck together
+  // Pattern: word1.word or word2.word -> word\n1. word (add newline before number)
+  processed = processed.replace(/([ก-๙a-zA-Z\]\)\*])(\d{1,2})\.([ก-๙a-zA-Z_\*])/g, '$1\n$2. $3')
+
+  // Also fix **number.** pattern
+  processed = processed.replace(/\*\*(\d+)\.\*\*/g, '**\n$1. **')
+
+  // Step 2: Fix bold with spaces - remove space after ** opening
+  let boldFixed = processed
+  do {
+    processed = boldFixed
+    boldFixed = processed.replace(/\*\*\s+([^\s*])/g, '**$1')
+  } while (boldFixed !== processed)
+  processed = boldFixed
+
+  // Fix space before closing **: word ** -> word**
+  processed = processed.replace(/(\S)\s+\*\*([^*]|$)/g, '$1**$2')
+
+  // Step 2: Fix headers - add space after # and newlines before
+  processed = processed.replace(/(?<=[^#\n]|^)(#{2,4})(?=[^\s#])/g, '\n\n$1 ')
+
+  // Step 3: Add newline before bullet points (-**)
+  // Pattern: any char (not newline) + optional spaces + -** -> char + newline + - **
+  processed = processed.replace(/([^\n])\s*-\*\*/g, '$1\n- **')
+
+  // Step 4: Add space after **bold**: patterns
+  processed = processed.replace(/(\*\*[^*]+\*\*):(?=\S)/g, '$1: ')
+
+  // Step 5: Add space after bold text followed by Thai/text (no punctuation)
+  processed = processed.replace(/(\*\*[^*]+\*\*)(?=[\u0E00-\u0E7Fa-zA-Z])/g, '$1 ')
+
+  // Step 6: Clean up multiple newlines
+  processed = processed.replace(/\n{3,}/g, '\n\n')
+
+  // Step 7: Clean up multiple spaces (but not in bold)
+  processed = processed.replace(/([^*])  +([^*])/g, '$1 $2')
+
+  return processed.trim()
+}
+
 function MessageContent({ content, isUser }: { content: string; isUser: boolean }) {
   // User messages are always plain text
   if (isUser) {
-    return <span>{content}</span>
+    return <span className="whitespace-pre-wrap">{content}</span>
   }
 
-  // Assistant messages use markdown
+  // Pre-process and render markdown
+  const processedContent = preprocessMarkdown(content)
+
+  // Assistant messages use markdown with custom styling
   return (
-    <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-purple-300 prose-strong:text-white prose-li:text-gray-300">
-      <ReactMarkdown>{content}</ReactMarkdown>
+    <div className="markdown-content text-left break-words">
+      <ReactMarkdown
+        components={{
+          // Headings
+          h1: ({ children }) => <h1 className="text-xl font-bold text-purple-300 mt-4 mb-2">{children}</h1>,
+          h2: ({ children }) => <h2 className="text-lg font-bold text-purple-300 mt-4 mb-2">{children}</h2>,
+          h3: ({ children }) => <h3 className="text-base font-semibold text-purple-300 mt-3 mb-1">{children}</h3>,
+          // Paragraphs
+          p: ({ children }) => <p className="mb-3 leading-relaxed">{children}</p>,
+          // Lists
+          ul: ({ children }) => <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>,
+          li: ({ children }) => <li className="text-gray-300">{children}</li>,
+          // Inline
+          strong: ({ children }) => <strong className="font-bold text-white">{children}</strong>,
+          em: ({ children }) => <em className="italic text-purple-200">{children}</em>,
+          code: ({ children }) => (
+            <code className="bg-secondary-700 px-1.5 py-0.5 rounded text-sm text-purple-300 font-mono">{children}</code>
+          ),
+          // Code blocks
+          pre: ({ children }) => (
+            <pre className="bg-secondary-900 p-3 rounded-lg overflow-x-auto mb-3 text-sm">{children}</pre>
+          ),
+          // Links
+          a: ({ href, children }) => (
+            <a href={href} className="text-primary-400 hover:text-primary-300 underline" target="_blank" rel="noopener noreferrer">
+              {children}
+            </a>
+          ),
+          // Blockquotes
+          blockquote: ({ children }) => (
+            <blockquote className="border-l-4 border-purple-500 pl-4 italic text-gray-400 mb-3">{children}</blockquote>
+          ),
+          // Horizontal rule
+          hr: () => <hr className="border-secondary-600 my-4" />,
+        }}
+      >
+        {processedContent}
+      </ReactMarkdown>
     </div>
   )
 }

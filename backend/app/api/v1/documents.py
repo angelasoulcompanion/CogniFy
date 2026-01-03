@@ -41,6 +41,8 @@ class DocumentResponse(BaseModel):
     language: str
     tags: List[str]
     processing_status: str
+    processing_step: Optional[str]
+    processing_progress: Optional[int]
     processing_error: Optional[str]
     total_chunks: int
     created_at: str
@@ -90,6 +92,8 @@ def _document_to_response(doc: Document) -> DocumentResponse:
         language=doc.language,
         tags=doc.tags,
         processing_status=doc.processing_status.value,
+        processing_step=doc.processing_step.value if doc.processing_step else None,
+        processing_progress=doc.processing_progress,
         processing_error=doc.processing_error,
         total_chunks=doc.total_chunks,
         created_at=doc.created_at.isoformat(),

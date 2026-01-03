@@ -19,6 +19,16 @@ class ProcessingStatus(str, Enum):
     FAILED = "failed"
 
 
+class ProcessingStep(str, Enum):
+    """Document processing step"""
+    PENDING = "pending"
+    EXTRACTING = "extracting"
+    CHUNKING = "chunking"
+    EMBEDDING = "embedding"
+    STORING = "storing"
+    COMPLETED = "completed"
+
+
 class FileType(str, Enum):
     """Supported file types"""
     PDF = "pdf"
@@ -79,6 +89,8 @@ class Document:
     language: str = "th"
     tags: List[str] = field(default_factory=list)
     processing_status: ProcessingStatus = ProcessingStatus.PENDING
+    processing_step: ProcessingStep = ProcessingStep.PENDING
+    processing_progress: int = 0
     processing_error: Optional[str] = None
     total_chunks: int = 0
     is_deleted: bool = False
@@ -145,6 +157,8 @@ class Document:
             "language": self.language,
             "tags": self.tags,
             "processing_status": self.processing_status.value,
+            "processing_step": self.processing_step.value if self.processing_step else "pending",
+            "processing_progress": self.processing_progress,
             "processing_error": self.processing_error,
             "total_chunks": self.total_chunks,
             "is_deleted": self.is_deleted,
@@ -169,6 +183,8 @@ class Document:
             language=data.get("language", "th"),
             tags=data.get("tags", []),
             processing_status=ProcessingStatus(data.get("processing_status", "pending")),
+            processing_step=ProcessingStep(data.get("processing_step", "pending")) if data.get("processing_step") else ProcessingStep.PENDING,
+            processing_progress=data.get("processing_progress", 0),
             processing_error=data.get("processing_error"),
             total_chunks=data.get("total_chunks", 0),
             is_deleted=data.get("is_deleted", False),

@@ -381,28 +381,86 @@ function DocumentCard({
 
       {/* Processing Progress Bar */}
       {isProcessing && (
-        <div className="mt-3 pt-3 border-t border-primary-500/20">
-          <div className="flex items-center justify-between text-xs text-primary-300 mb-2">
-            <span>Processing document...</span>
-            <span className="flex items-center gap-1">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Please wait
-            </span>
-          </div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-primary-800/50">
-            <div
-              className="h-full bg-gradient-to-r from-primary-500 to-violet-500 animate-pulse"
-              style={{ width: '100%' }}
-            />
-          </div>
-          <div className="mt-2 flex justify-between text-[10px] text-primary-400/70">
-            <span>Extracting</span>
-            <span>Chunking</span>
-            <span>Embedding</span>
-            <span>Storing</span>
-          </div>
-        </div>
+        <ProcessingProgressBar
+          step={document.processing_step}
+          progress={document.processing_progress ?? 0}
+        />
       )}
+    </div>
+  )
+}
+
+// =============================================================================
+// PROCESSING PROGRESS BAR COMPONENT
+// =============================================================================
+
+const PROCESSING_STEPS = [
+  { key: 'extracting', label: 'Extracting', icon: '📄', description: 'Reading document content...' },
+  { key: 'chunking', label: 'Chunking', icon: '✂️', description: 'Splitting into segments...' },
+  { key: 'embedding', label: 'Embedding', icon: '🧠', description: 'Generating AI embeddings...' },
+  { key: 'storing', label: 'Storing', icon: '💾', description: 'Saving to database...' },
+] as const
+
+function ProcessingProgressBar({
+  step,
+  progress,
+}: {
+  step: string | null
+  progress: number
+}) {
+  const currentStepIndex = PROCESSING_STEPS.findIndex(s => s.key === step)
+  const currentStepInfo = PROCESSING_STEPS[currentStepIndex] || PROCESSING_STEPS[0]
+
+  return (
+    <div className="mt-3 pt-3 border-t border-primary-500/20">
+      {/* Current step info */}
+      <div className="flex items-center justify-between text-xs mb-2">
+        <span className="text-primary-200 font-medium flex items-center gap-1.5">
+          <span className="text-base">{currentStepInfo.icon}</span>
+          {currentStepInfo.description}
+        </span>
+        <span className="text-primary-400 font-mono">
+          {progress}%
+        </span>
+      </div>
+
+      {/* Progress bar */}
+      <div className="h-2 w-full overflow-hidden rounded-full bg-primary-800/50">
+        <div
+          className="h-full bg-gradient-to-r from-primary-500 via-violet-500 to-primary-400 transition-all duration-500 ease-out"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
+      {/* Step indicators */}
+      <div className="mt-2 flex justify-between">
+        {PROCESSING_STEPS.map((s, i) => {
+          const isActive = s.key === step
+          const isCompleted = currentStepIndex > i
+          return (
+            <div
+              key={s.key}
+              className={cn(
+                'flex items-center gap-1 text-[10px] transition-all',
+                isActive && 'text-primary-300 font-medium scale-105',
+                isCompleted && 'text-green-400',
+                !isActive && !isCompleted && 'text-primary-600'
+              )}
+            >
+              {isCompleted ? (
+                <CheckCircle2 className="h-3 w-3" />
+              ) : isActive ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <span className="h-3 w-3 rounded-full border border-current flex items-center justify-center text-[8px]">
+                  {i + 1}
+                </span>
+              )}
+              <span>{s.label}</span>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

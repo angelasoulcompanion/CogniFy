@@ -41,6 +41,8 @@ export interface AuthState {
 // DOCUMENT TYPES
 // =============================================================================
 
+export type ProcessingStep = 'pending' | 'extracting' | 'chunking' | 'embedding' | 'storing' | 'completed';
+
 export interface Document {
   document_id: string;
   filename: string;
@@ -53,6 +55,8 @@ export interface Document {
   language: string;
   tags: string[];
   processing_status: 'pending' | 'processing' | 'completed' | 'failed';
+  processing_step: ProcessingStep | null;
+  processing_progress: number | null;
   processing_error: string | null;
   total_chunks: number;
   created_at: string;

@@ -105,10 +105,8 @@ export async function streamChat(options: StreamChatOptions): Promise<() => void
     })
 
     if (!response.ok) {
-      // Handle 401 - session expired
+      // Handle 401 - session expired (don't hard redirect, let auth interceptor handle)
       if (response.status === 401) {
-        clearAuth()
-        window.location.href = '/login'
         throw new Error('Session expired. Please login again.')
       }
       throw new Error(`HTTP error! status: ${response.status}`)
