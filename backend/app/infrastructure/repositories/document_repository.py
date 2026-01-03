@@ -329,6 +329,8 @@ class DocumentChunkRepository(BaseRepository[DocumentChunk]):
             RETURNING *
         """
         embedding_str = self._embedding_to_pgvector(chunk.embedding) if chunk.embedding else None
+        # Truncate section_title to 500 chars to fit VARCHAR(500)
+        section_title = chunk.section_title[:500] if chunk.section_title else None
         row = await Database.fetchrow(
             query,
             chunk.chunk_id,
@@ -336,7 +338,7 @@ class DocumentChunkRepository(BaseRepository[DocumentChunk]):
             chunk.chunk_index,
             chunk.content,
             chunk.page_number,
-            chunk.section_title,
+            section_title,
             chunk.token_count,
             embedding_str,
             chunk.embedding_model,
@@ -364,7 +366,8 @@ class DocumentChunkRepository(BaseRepository[DocumentChunk]):
                 chunk.chunk_index,
                 chunk.content,
                 chunk.page_number,
-                chunk.section_title,
+                # Truncate section_title to 500 chars to fit VARCHAR(500)
+                chunk.section_title[:500] if chunk.section_title else None,
                 chunk.token_count,
                 self._embedding_to_pgvector(chunk.embedding) if chunk.embedding else None,
                 chunk.embedding_model,

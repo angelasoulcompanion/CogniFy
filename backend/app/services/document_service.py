@@ -726,6 +726,8 @@ def process_document_background(document_id: UUID) -> None:
                 embedding_str = None
                 if embedding:
                     embedding_str = '[' + ','.join(str(x) for x in embedding) + ']'
+                # Truncate section_title to 500 chars to fit VARCHAR(500)
+                section_title = chunk.section_title[:500] if chunk.section_title else None
                 await conn.execute(
                     """
                     INSERT INTO document_chunks
@@ -733,7 +735,7 @@ def process_document_background(document_id: UUID) -> None:
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::vector)
                     """,
                     chunk_id, document_id, i, chunk.content, chunk.page_number,
-                    chunk.section_title, chunk.token_count, embedding_str
+                    section_title, chunk.token_count, embedding_str
                 )
 
             # 8. Update document as completed
