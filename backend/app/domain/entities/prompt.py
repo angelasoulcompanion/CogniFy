@@ -31,6 +31,7 @@ class ExpertRole(str, Enum):
     DATA = "data"
     BUSINESS = "business"
     RESEARCHER = "researcher"
+    AI_ENGINEER = "ai_engineer"
 
 
 @dataclass
@@ -48,7 +49,12 @@ class PromptVariable:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "PromptVariable":
+    def from_dict(cls, data) -> "PromptVariable":
+        """Create from dict or string (for backwards compatibility)"""
+        # Handle string input (legacy format like ["context"])
+        if isinstance(data, str):
+            return cls(name=data, required=True, description="")
+        # Handle dict input (proper format)
         return cls(
             name=data.get("name", ""),
             required=data.get("required", True),
