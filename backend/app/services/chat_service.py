@@ -118,6 +118,7 @@ class PromptTemplates:
         "data_analyst": "data",
         "business_consultant": "business",
         "researcher": "researcher",
+        "ai_engineer": "ai_engineer",
     }
 
     # Expert role definitions

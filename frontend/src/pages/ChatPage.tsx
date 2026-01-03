@@ -30,6 +30,9 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { Copy, Check } from 'lucide-react'
 import type { ChatMessage, SourceReference } from '@/types'
 
 // Model options - match actual installed Ollama models
@@ -113,6 +116,14 @@ const EXPERT_OPTIONS: ExpertOption[] = [
     icon: GraduationCap,
     color: 'text-purple-400',
     description: 'Academic research, literature review',
+  },
+  {
+    value: 'ai_engineer',
+    label: 'AI Engineer',
+    labelTh: 'วิศวกร AI',
+    icon: Cpu,
+    color: 'text-pink-400',
+    description: 'ML, Deep Learning, LLMs, AI systems',
   },
 ]
 
@@ -468,6 +479,61 @@ function preprocessMarkdown(text: string): string {
   return processed.trim()
 }
 
+// =============================================================================
+// CODE BLOCK COMPONENT with Syntax Highlighting
+// =============================================================================
+
+function CodeBlock({ language, value }: { language: string; value: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const copyToClipboard = async () => {
+    await navigator.clipboard.writeText(value)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="relative group mb-4 rounded-lg overflow-hidden">
+      {/* Header with language badge and copy button */}
+      <div className="flex items-center justify-between bg-[#1e1e1e] px-4 py-2 border-b border-gray-700">
+        <span className="text-xs text-gray-400 font-mono uppercase">{language || 'code'}</span>
+        <button
+          onClick={copyToClipboard}
+          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors"
+        >
+          {copied ? (
+            <>
+              <Check className="w-4 h-4 text-green-400" />
+              <span className="text-green-400">Copied!</span>
+            </>
+          ) : (
+            <>
+              <Copy className="w-4 h-4" />
+              <span>Copy</span>
+            </>
+          )}
+        </button>
+      </div>
+      {/* Code with syntax highlighting */}
+      <SyntaxHighlighter
+        language={language || 'text'}
+        style={oneDark}
+        customStyle={{
+          margin: 0,
+          padding: '1rem',
+          fontSize: '0.875rem',
+          lineHeight: '1.5',
+          background: '#1e1e1e',
+        }}
+        showLineNumbers={value.split('\n').length > 3}
+        wrapLines
+      >
+        {value}
+      </SyntaxHighlighter>
+    </div>
+  )
+}
+
 function MessageContent({ content, isUser }: { content: string; isUser: boolean }) {
   // User messages are always plain text
   if (isUser) {
@@ -495,13 +561,46 @@ function MessageContent({ content, isUser }: { content: string; isUser: boolean 
           // Inline
           strong: ({ children }) => <strong className="font-bold text-white">{children}</strong>,
           em: ({ children }) => <em className="italic text-purple-200">{children}</em>,
-          code: ({ children }) => (
-            <code className="bg-secondary-700 px-1.5 py-0.5 rounded text-sm text-purple-300 font-mono">{children}</code>
-          ),
-          // Code blocks
-          pre: ({ children }) => (
-            <pre className="bg-secondary-900 p-3 rounded-lg overflow-x-auto mb-3 text-sm">{children}</pre>
-          ),
+          // Inline code (no code block)
+          code: ({ node, className, children, ...props }) => {
+            const match = /language-(\w+)/.exec(className || '')
+            const isInline = !match && !className
+
+            if (isInline) {
+              // Inline code styling
+              return (
+                <code className="bg-secondary-700 px-1.5 py-0.5 rounded text-sm text-purple-300 font-mono" {...props}>
+                  {children}
+                </code>
+              )
+            }
+
+            // Code block - will be handled by pre
+            return (
+              <code className={className} {...props}>
+                {children}
+              </code>
+            )
+          },
+          // Code blocks with syntax highlighting
+          pre: ({ children }) => {
+            // Extract code content and language from children
+            const codeElement = children as React.ReactElement
+            if (codeElement?.props) {
+              const { className, children: codeContent } = codeElement.props
+              const match = /language-(\w+)/.exec(className || '')
+              const language = match ? match[1] : ''
+              const value = String(codeContent).replace(/\n$/, '')
+
+              return <CodeBlock language={language} value={value} />
+            }
+            // Fallback for plain pre
+            return (
+              <pre className="bg-[#1e1e1e] p-4 rounded-lg overflow-x-auto mb-3 text-sm font-mono">
+                {children}
+              </pre>
+            )
+          },
           // Links
           a: ({ href, children }) => (
             <a href={href} className="text-primary-400 hover:text-primary-300 underline" target="_blank" rel="noopener noreferrer">
