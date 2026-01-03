@@ -494,7 +494,22 @@ function MessageContent({ content, isUser }: { content: string; isUser: boolean 
   // beautiful syntax highlighting with Shiki
   return (
     <div className="markdown-content text-left break-words prose prose-invert prose-purple max-w-none">
-      <Streamdown>{processedContent}</Streamdown>
+      <Streamdown
+        shikiTheme={['tokyo-night', 'github-light']}
+        controls={{
+          code: true,
+          table: true,
+          mermaid: {
+            copy: true,
+            download: true,
+            fullscreen: true,
+          }
+        }}
+        mode="streaming"
+        parseIncompleteMarkdown={true}
+      >
+        {processedContent}
+      </Streamdown>
     </div>
   )
 }
