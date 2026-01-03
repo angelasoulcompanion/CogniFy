@@ -192,9 +192,11 @@ export function useChat(options: UseChatOptions = {}) {
               break
 
             case 'done':
+              // Use final_content from backend (post-processed) if available
+              const finalContent = event.final_content || fullContent
               updateMessage(assistantMessageId, {
                 message_id: event.message_id,
-                content: fullContent,
+                content: finalContent,
                 response_time_ms: event.response_time_ms,
                 isStreaming: false,
               })

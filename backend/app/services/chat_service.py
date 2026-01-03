@@ -405,12 +405,120 @@ Be helpful, accurate, and concise."""
         # 6. Add space before opening parenthesis preceded by Thai
         text = re.sub(r'([\u0E00-\u0E7F])\(', r'\1 (', text)
 
-        # 7. Clean up double/triple spaces
+        # 7. Add space after closing parenthesis followed by uppercase English
+        # e.g., "(VAEs)Variational" → "(VAEs) Variational"
+        text = re.sub(r'\)([A-Z])', r') \1', text)
+
+        # 8. Add space before opening parenthesis preceded by lowercase English
+        # e.g., "models(generative" → "models (generative"
+        text = re.sub(r'([a-z])\(', r'\1 (', text)
+
+        # 9. Add space after closing parenthesis followed by lowercase English word
+        # e.g., "(VAEs)are" → "(VAEs) are"
+        text = re.sub(r'\)([a-z]{2,})', r') \1', text)
+
+        # 10. Common concatenated AI/ML terms (LLMs often miss spaces)
+        common_terms = [
+            (r'generativemodels?', 'generative model'),
+            (r'neuralnetworks?', 'neural network'),
+            (r'machinelearning', 'machine learning'),
+            (r'deeplearning', 'deep learning'),
+            (r'naturallanguage', 'natural language'),
+            (r'artificialintelligence', 'artificial intelligence'),
+            (r'languagemodels?', 'language model'),
+            (r'transformermodels?', 'transformer model'),
+            (r'attentionmechanism', 'attention mechanism'),
+            (r'tokenembedding', 'token embedding'),
+            (r'vectordatabase', 'vector database'),
+            (r'semanticsearch', 'semantic search'),
+            (r'textgeneration', 'text generation'),
+            (r'imagegeneration', 'image generation'),
+            (r'finetuning', 'fine-tuning'),
+            (r'pretraining', 'pre-training'),
+            (r'latentspace', 'latent space'),
+            (r'trainingdata', 'training data'),
+            (r'inputoutput', 'input/output'),
+        ]
+        for pattern, replacement in common_terms:
+            text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+
+        # 11. Clean up double/triple spaces
         text = re.sub(r'  +', ' ', text)
 
         # Debug log
         if text != original and len(original) > 20:
             print(f"🔧 Thai-English spacing fixed: {len(original)} -> {len(text)} chars")
+
+        return text
+
+    @classmethod
+    def fix_inline_code(cls, text: str) -> str:
+        """
+        Detect and fix inline code that should be in code blocks.
+
+        LLMs sometimes generate code without proper code fences:
+        - "pythonclass SimpleAI:def __init__..." → ```python\nclass SimpleAI:\n    def __init__...```
+        - "import torch model = torch.nn..." → ```python\nimport torch\nmodel = torch.nn...```
+        """
+        if not text:
+            return text
+
+        import re
+
+        # Pattern 1: Detect "python" followed immediately by code keywords
+        # e.g., "pythonclass", "pythonimport", "pythonfrom", "pythondef"
+        code_start_pattern = r'python(class\s|import\s|from\s|def\s|async\s|@|\#)'
+
+        # Pattern 2: Detect code that starts with language name stuck to keywords
+        lang_code_patterns = [
+            (r'python(class\s+\w+)', 'python', r'class \1'),
+            (r'python(import\s+\w+)', 'python', r'import \1'),
+            (r'python(from\s+\w+)', 'python', r'from \1'),
+            (r'python(def\s+\w+)', 'python', r'def \1'),
+        ]
+
+        # Check if text contains inline code pattern
+        if re.search(code_start_pattern, text, re.IGNORECASE):
+            # Try to extract the code block
+            # Pattern: "python" + code content until we hit Thai text or end
+            code_extract = re.search(
+                r'python((?:class|import|from|def|async|@|\#)[^\u0E00-\u0E7F]*?)(?=[\u0E00-\u0E7F]|$)',
+                text,
+                re.IGNORECASE | re.DOTALL
+            )
+
+            if code_extract:
+                original_match = 'python' + code_extract.group(1)
+                code_content = code_extract.group(1).strip()
+
+                # Try to format the code with proper newlines
+                # Add newlines before common Python keywords
+                code_content = re.sub(r'(class\s+\w+[^:]*:)', r'\n\1\n', code_content)
+                code_content = re.sub(r'(def\s+\w+\s*\([^)]*\)[^:]*:)', r'\n\1\n', code_content)
+                code_content = re.sub(r'(import\s+\w+)', r'\n\1', code_content)
+                code_content = re.sub(r'(from\s+\w+\s+import)', r'\n\1', code_content)
+                code_content = re.sub(r'(if\s+[^:]+:)', r'\n\1\n', code_content)
+                code_content = re.sub(r'(else:)', r'\n\1\n', code_content)
+                code_content = re.sub(r'(return\s+)', r'\n    \1', code_content)
+                code_content = re.sub(r'(self\.\w+\s*=)', r'\n        \1', code_content)
+
+                # Clean up multiple newlines
+                code_content = re.sub(r'\n{3,}', '\n\n', code_content)
+                code_content = code_content.strip()
+
+                # Create proper code block
+                code_block = f"\n```python\n{code_content}\n```\n"
+
+                # Replace in text
+                text = text.replace(original_match, code_block, 1)
+                print(f"🔧 Fixed inline code block: {len(original_match)} chars → code fence")
+
+        # Pattern 3: Detect backtick code that's missing language
+        # e.g., "`class SimpleAI:`" should be "```python\nclass SimpleAI:\n```"
+        inline_code = re.search(r'`((?:class|def|import|from)\s+[^`]+)`', text)
+        if inline_code and '```' not in text:
+            code = inline_code.group(1)
+            text = text.replace(f'`{code}`', f'\n```python\n{code}\n```\n')
 
         return text
 
@@ -725,9 +833,11 @@ class ChatService:
         # Generate response
         llm_response = await self.llm_service.generate(messages, config)
 
-        # Post-process: Filter Chinese + Fix markdown formatting
+        # Post-process: Filter Chinese + Fix markdown formatting + Fix code blocks
         filtered_content = PromptTemplates.filter_chinese(llm_response.content)
         filtered_content = PromptTemplates.fix_markdown_formatting(filtered_content)
+        filtered_content = PromptTemplates.fix_thai_english_spacing(filtered_content)
+        filtered_content = PromptTemplates.fix_inline_code(filtered_content)
 
         # Add assistant message
         source_dicts = self._format_sources(sources)
@@ -888,6 +998,8 @@ class ChatService:
             full_content = PromptTemplates.fix_markdown_formatting(full_content)
             # Also fix Thai-English spacing on full content (for proper storage)
             full_content = PromptTemplates.fix_thai_english_spacing(full_content)
+            # Fix inline code that should be in code blocks
+            full_content = PromptTemplates.fix_inline_code(full_content)
 
             # Format and send sources
             source_dicts = self._format_sources(sources)
@@ -920,12 +1032,13 @@ class ChatService:
             if len(conversation.messages) == 2:  # user + assistant
                 await self.conversation_repo.generate_title(conversation.conversation_id)
 
-            # Send done event
+            # Send done event with final content (post-processed)
             yield StreamEvent(
                 event_type="done",
                 data={
                     "message_id": str(assistant_msg.message_id),
                     "response_time_ms": response_time,
+                    "final_content": full_content,  # Send fixed content for frontend update
                 }
             )
 

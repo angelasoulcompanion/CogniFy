@@ -247,6 +247,7 @@ export interface SSEDoneEvent {
   type: 'done';
   message_id: string;
   response_time_ms: number;
+  final_content?: string;  // Post-processed content from backend
 }
 
 export interface SSEErrorEvent {
