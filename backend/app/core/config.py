@@ -44,9 +44,9 @@ class Settings(BaseSettings):
     ALLOWED_EXTENSIONS: List[str] = [".pdf", ".docx", ".doc", ".txt", ".xlsx", ".xls", ".png", ".jpg", ".jpeg"]
 
     # Embedding Settings
-    EMBEDDING_MODEL: str = "nomic-embed-text"
+    EMBEDDING_MODEL: str = "bge-m3"  # Best: 1024 dims, 8192 context, 100+ languages
     EMBEDDING_FALLBACK_MODEL: str = "mxbai-embed-large"
-    EMBEDDING_DIMENSION: int = 768
+    EMBEDDING_DIMENSION: int = 1024
     EMBEDDING_CACHE_TTL: int = 3600  # 1 hour
 
     # LLM Settings - General

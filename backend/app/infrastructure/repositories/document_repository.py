@@ -299,7 +299,7 @@ class DocumentChunkRepository(BaseRepository[DocumentChunk]):
             section_title=row.get("section_title"),
             token_count=row.get("token_count"),
             embedding=list(row["embedding"]) if row.get("embedding") else None,
-            embedding_model=row.get("embedding_model", "nomic-embed-text"),
+            embedding_model=row.get("embedding_model", "bge-m3"),
             created_at=row["created_at"],
         )
 

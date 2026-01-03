@@ -24,7 +24,7 @@ class EmbeddingRepository:
     async def get_cached_embedding(
         self,
         text: str,
-        model_name: str = "nomic-embed-text"
+        model_name: str = "bge-m3"
     ) -> Optional[List[float]]:
         """
         Get embedding from cache if exists and not expired
@@ -60,7 +60,7 @@ class EmbeddingRepository:
         self,
         text: str,
         embedding: List[float],
-        model_name: str = "nomic-embed-text",
+        model_name: str = "bge-m3",
         ttl_hours: int = 1
     ) -> bool:
         """
@@ -287,7 +287,7 @@ class EmbeddingRepository:
         self,
         chunk_id: UUID,
         embedding: List[float],
-        model_name: str = "nomic-embed-text"
+        model_name: str = "bge-m3"
     ) -> bool:
         """Update embedding for a specific chunk"""
         sql = """

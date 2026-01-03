@@ -122,9 +122,11 @@ class EmbeddingService:
         """Generate embedding using Ollama"""
         try:
             client = await self._get_client()
+            # bge-m3 supports 8192 tokens (~32000 chars), truncate as safety margin
+            truncated_text = text[:30000] if len(text) > 30000 else text
             response = await client.post(
                 f"{self.ollama_url}/api/embeddings",
-                json={"model": model, "prompt": text}
+                json={"model": model, "prompt": truncated_text}
             )
             response.raise_for_status()
             data = response.json()

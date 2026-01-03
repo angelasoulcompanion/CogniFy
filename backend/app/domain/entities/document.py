@@ -54,7 +54,7 @@ class DocumentChunk:
     section_title: Optional[str] = None
     token_count: Optional[int] = None
     embedding: Optional[List[float]] = None
-    embedding_model: str = "nomic-embed-text"
+    embedding_model: str = "bge-m3"
     created_at: datetime = field(default_factory=datetime.now)
 
     def to_dict(self) -> dict:

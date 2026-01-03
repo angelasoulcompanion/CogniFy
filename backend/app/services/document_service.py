@@ -692,9 +692,10 @@ def process_document_background(document_id: UUID) -> None:
                 )
                 try:
                     async with httpx.AsyncClient(timeout=60.0) as http_client:
+                        # bge-m3 supports 8192 tokens, use full chunk content
                         response = await http_client.post(
                             "http://localhost:11434/api/embeddings",
-                            json={"model": "nomic-embed-text", "prompt": chunk.content[:8000]}
+                            json={"model": settings.EMBEDDING_MODEL, "prompt": chunk.content}
                         )
                         if response.status_code == 200:
                             data = response.json()
