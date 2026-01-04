@@ -9,7 +9,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
 import { Logo, LogoIcon } from '@/components/Logo'
 import {
-  MessageSquare,
+  Home,
   Search,
   FileText,
   Database,
@@ -31,7 +31,7 @@ export function Layout() {
   }
 
   const navItems = [
-    { to: '/chat', icon: MessageSquare, label: 'Chat' },
+    { to: '/home', icon: Home, label: 'Home' },
     { to: '/search', icon: Search, label: 'Search' },
     { to: '/documents', icon: FileText, label: 'Documents' },
     { to: '/connectors', icon: Database, label: 'Connectors' },
@@ -69,7 +69,7 @@ export function Layout() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 space-y-1 px-2 py-4">
+        <nav className="flex-1 space-y-1 px-2 py-4 relative z-[100]">
           {navItems.map((item) => (
             <NavLink
               key={item.to}

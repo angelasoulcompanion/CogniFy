@@ -6,7 +6,7 @@
 
 import { cn } from '@/lib/utils'
 import { Brain, Type, Sparkles, type LucideIcon } from 'lucide-react'
-import { useSearchStore } from '@/hooks/useSearch'
+import { useSearchStore, useSearch } from '@/hooks/useSearch'
 import type { SearchType } from '@/types'
 
 interface SearchTypeOption {
@@ -44,7 +44,17 @@ const SEARCH_TYPES: SearchTypeOption[] = [
 ]
 
 export function SearchTypeSelector() {
-  const { config, setConfig } = useSearchStore()
+  const { config, setConfig, query } = useSearchStore()
+  const { search } = useSearch()
+
+  const handleSelect = (value: SearchType) => {
+    if (config.searchType === value) return // Already selected
+    setConfig({ searchType: value })
+    // Auto re-search if there's a query
+    if (query.trim()) {
+      setTimeout(() => search(), 50) // Small delay to ensure config is updated
+    }
+  }
 
   return (
     <div className="space-y-2">
@@ -55,7 +65,7 @@ export function SearchTypeSelector() {
         return (
           <button
             key={type.value}
-            onClick={() => setConfig({ searchType: type.value })}
+            onClick={() => handleSelect(type.value)}
             className={cn(
               'relative w-full flex items-start gap-3 rounded-xl p-3 border transition-all text-left',
               isSelected

@@ -16,9 +16,17 @@ import {
   useToggleUserStatus,
   formatNumber,
   getRoleBadgeColor,
-} from '@/hooks/useAdmin'
+  useAdminAnnouncements,
+  useCreateAnnouncement,
+  useUpdateAnnouncement,
+  useDeleteAnnouncement,
+  usePublishAnnouncement,
+  useUnpublishAnnouncement,
+  usePinAnnouncement,
+  useUnpinAnnouncement,
+} from '@/hooks'
 import { useAuth } from '@/hooks/useAuth'
-import type { UserStats } from '@/types'
+import type { UserStats, Announcement, CreateAnnouncementRequest, AnnouncementCategory } from '@/types'
 import {
   Users,
   FileText,
@@ -34,6 +42,18 @@ import {
   FileImage,
   FileSpreadsheet,
   File,
+  Newspaper,
+  Plus,
+  Edit2,
+  Trash2,
+  Eye,
+  EyeOff,
+  Pin,
+  PinOff,
+  X,
+  AlertCircle,
+  Info,
+  PartyPopper,
 } from 'lucide-react'
 
 // =============================================================================
@@ -343,11 +363,384 @@ function TopUsersList() {
 }
 
 // =============================================================================
+// NEWS MANAGEMENT COMPONENT
+// =============================================================================
+
+const CATEGORY_OPTIONS: { value: AnnouncementCategory; label: string; icon: React.ElementType; color: string }[] = [
+  { value: 'general', label: 'General', icon: Info, color: 'text-blue-400' },
+  { value: 'important', label: 'Important', icon: AlertCircle, color: 'text-red-400' },
+  { value: 'update', label: 'Update', icon: RefreshCw, color: 'text-green-400' },
+  { value: 'event', label: 'Event', icon: PartyPopper, color: 'text-yellow-400' },
+]
+
+function AnnouncementModal({
+  announcement,
+  onClose,
+  onSave,
+  isSaving,
+}: {
+  announcement?: Announcement | null
+  onClose: () => void
+  onSave: (data: CreateAnnouncementRequest) => void
+  isSaving: boolean
+}) {
+  const [title, setTitle] = useState(announcement?.title || '')
+  const [content, setContent] = useState(announcement?.content || '')
+  const [category, setCategory] = useState<AnnouncementCategory>(announcement?.category || 'general')
+  const [coverImageUrl, setCoverImageUrl] = useState(announcement?.cover_image_url || '')
+  const [isPublished, setIsPublished] = useState(announcement?.is_published || false)
+  const [isPinned, setIsPinned] = useState(announcement?.is_pinned || false)
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    onSave({
+      title,
+      content,
+      category,
+      cover_image_url: coverImageUrl || null,
+      is_published: isPublished,
+      is_pinned: isPinned,
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-2xl bg-secondary-800 rounded-2xl border border-secondary-700 shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-secondary-700">
+          <h2 className="text-lg font-semibold text-white">
+            {announcement ? 'Edit Announcement' : 'Create Announcement'}
+          </h2>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-lg text-secondary-400 hover:bg-secondary-700 hover:text-white"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+          {/* Title */}
+          <div>
+            <label className="block text-sm font-medium text-secondary-300 mb-2">Title</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              className="w-full px-4 py-2 rounded-lg bg-secondary-700 border border-secondary-600 text-white placeholder-secondary-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none"
+              placeholder="Announcement title..."
+            />
+          </div>
+
+          {/* Category */}
+          <div>
+            <label className="block text-sm font-medium text-secondary-300 mb-2">Category</label>
+            <div className="grid grid-cols-4 gap-2">
+              {CATEGORY_OPTIONS.map((opt) => {
+                const Icon = opt.icon
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setCategory(opt.value)}
+                    className={cn(
+                      'flex flex-col items-center gap-1 p-3 rounded-lg border transition-colors',
+                      category === opt.value
+                        ? 'border-primary-500 bg-primary-500/10'
+                        : 'border-secondary-600 bg-secondary-700 hover:border-secondary-500'
+                    )}
+                  >
+                    <Icon className={cn('h-5 w-5', opt.color)} />
+                    <span className="text-xs text-secondary-300">{opt.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Cover Image URL */}
+          <div>
+            <label className="block text-sm font-medium text-secondary-300 mb-2">
+              Cover Image URL <span className="text-secondary-500">(optional)</span>
+            </label>
+            <input
+              type="url"
+              value={coverImageUrl}
+              onChange={(e) => setCoverImageUrl(e.target.value)}
+              className="w-full px-4 py-2 rounded-lg bg-secondary-700 border border-secondary-600 text-white placeholder-secondary-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none"
+              placeholder="https://example.com/image.jpg"
+            />
+          </div>
+
+          {/* Content */}
+          <div>
+            <label className="block text-sm font-medium text-secondary-300 mb-2">
+              Content <span className="text-secondary-500">(Markdown supported)</span>
+            </label>
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              required
+              rows={8}
+              className="w-full px-4 py-2 rounded-lg bg-secondary-700 border border-secondary-600 text-white placeholder-secondary-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none resize-none font-mono text-sm"
+              placeholder="# Title&#10;&#10;Write your announcement content in **Markdown**..."
+            />
+          </div>
+
+          {/* Options */}
+          <div className="flex gap-6">
+            <label className="flex items-center gap-2 text-sm text-secondary-300">
+              <input
+                type="checkbox"
+                checked={isPublished}
+                onChange={(e) => setIsPublished(e.target.checked)}
+                className="rounded border-secondary-600 bg-secondary-700 text-primary-500"
+              />
+              Publish immediately
+            </label>
+            <label className="flex items-center gap-2 text-sm text-secondary-300">
+              <input
+                type="checkbox"
+                checked={isPinned}
+                onChange={(e) => setIsPinned(e.target.checked)}
+                className="rounded border-secondary-600 bg-secondary-700 text-primary-500"
+              />
+              Pin to top
+            </label>
+          </div>
+        </form>
+
+        {/* Footer */}
+        <div className="flex justify-end gap-3 p-4 border-t border-secondary-700">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-sm text-secondary-300 hover:text-white transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={isSaving || !title || !content}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSaving ? 'Saving...' : announcement ? 'Update' : 'Create'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function NewsManagement() {
+  const [showModal, setShowModal] = useState(false)
+  const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null)
+
+  const { data, isLoading, refetch } = useAdminAnnouncements({ limit: 50 })
+  const createAnnouncement = useCreateAnnouncement()
+  const updateAnnouncement = useUpdateAnnouncement()
+  const deleteAnnouncement = useDeleteAnnouncement()
+  const publishAnnouncement = usePublishAnnouncement()
+  const unpublishAnnouncement = useUnpublishAnnouncement()
+  const pinAnnouncement = usePinAnnouncement()
+  const unpinAnnouncement = useUnpinAnnouncement()
+
+  const handleCreate = () => {
+    setEditingAnnouncement(null)
+    setShowModal(true)
+  }
+
+  const handleEdit = (announcement: Announcement) => {
+    setEditingAnnouncement(announcement)
+    setShowModal(true)
+  }
+
+  const handleSave = (formData: CreateAnnouncementRequest) => {
+    if (editingAnnouncement) {
+      updateAnnouncement.mutate(
+        { announcementId: editingAnnouncement.announcement_id, data: formData },
+        { onSuccess: () => { setShowModal(false); refetch() } }
+      )
+    } else {
+      createAnnouncement.mutate(formData, {
+        onSuccess: () => { setShowModal(false); refetch() }
+      })
+    }
+  }
+
+  const handleDelete = (id: string) => {
+    if (confirm('Are you sure you want to delete this announcement?')) {
+      deleteAnnouncement.mutate(id)
+    }
+  }
+
+  const handleTogglePublish = (announcement: Announcement) => {
+    if (announcement.is_published) {
+      unpublishAnnouncement.mutate(announcement.announcement_id)
+    } else {
+      publishAnnouncement.mutate(announcement.announcement_id)
+    }
+  }
+
+  const handleTogglePin = (announcement: Announcement) => {
+    if (announcement.is_pinned) {
+      unpinAnnouncement.mutate(announcement.announcement_id)
+    } else {
+      pinAnnouncement.mutate(announcement.announcement_id)
+    }
+  }
+
+  const getCategoryBadge = (category: AnnouncementCategory) => {
+    const opt = CATEGORY_OPTIONS.find(o => o.value === category)
+    if (!opt) return null
+    const Icon = opt.icon
+    return (
+      <span className={cn('inline-flex items-center gap-1 text-xs font-medium', opt.color)}>
+        <Icon className="h-3 w-3" />
+        {opt.label}
+      </span>
+    )
+  }
+
+  return (
+    <div className="bg-secondary-800/50 rounded-xl border border-secondary-700/50">
+      <div className="p-4 border-b border-secondary-700 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Newspaper className="h-5 w-5 text-primary-400" />
+          <h3 className="font-semibold text-white">News Management</h3>
+          <span className="text-sm text-secondary-400">{data?.total || 0} announcements</span>
+        </div>
+        <button
+          onClick={handleCreate}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-500"
+        >
+          <Plus className="h-4 w-4" />
+          New Announcement
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="p-8 text-center text-secondary-400">Loading announcements...</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-secondary-700">
+                <th className="py-3 px-4 text-left text-xs font-medium text-secondary-400 uppercase tracking-wider">Title</th>
+                <th className="py-3 px-4 text-left text-xs font-medium text-secondary-400 uppercase tracking-wider">Category</th>
+                <th className="py-3 px-4 text-center text-xs font-medium text-secondary-400 uppercase tracking-wider">Status</th>
+                <th className="py-3 px-4 text-center text-xs font-medium text-secondary-400 uppercase tracking-wider">Pinned</th>
+                <th className="py-3 px-4 text-left text-xs font-medium text-secondary-400 uppercase tracking-wider">Created</th>
+                <th className="py-3 px-4 text-right text-xs font-medium text-secondary-400 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-secondary-700/50">
+              {data?.announcements.map((announcement) => (
+                <tr key={announcement.announcement_id} className="hover:bg-secondary-700/30">
+                  <td className="py-3 px-4">
+                    <p className="font-medium text-white truncate max-w-xs">{announcement.title}</p>
+                  </td>
+                  <td className="py-3 px-4">{getCategoryBadge(announcement.category)}</td>
+                  <td className="py-3 px-4 text-center">
+                    <span className={cn(
+                      'inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium',
+                      announcement.is_published
+                        ? 'bg-green-500/20 text-green-400'
+                        : 'bg-yellow-500/20 text-yellow-400'
+                    )}>
+                      {announcement.is_published ? (
+                        <><Eye className="h-3 w-3" /> Published</>
+                      ) : (
+                        <><EyeOff className="h-3 w-3" /> Draft</>
+                      )}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-center">
+                    {announcement.is_pinned && <Pin className="h-4 w-4 text-primary-400 mx-auto" />}
+                  </td>
+                  <td className="py-3 px-4 text-sm text-secondary-400">
+                    {announcement.created_at
+                      ? new Date(announcement.created_at).toLocaleDateString()
+                      : '-'}
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => handleTogglePublish(announcement)}
+                        className={cn(
+                          'p-1.5 rounded-lg transition-colors',
+                          announcement.is_published
+                            ? 'text-yellow-400 hover:bg-yellow-500/20'
+                            : 'text-green-400 hover:bg-green-500/20'
+                        )}
+                        title={announcement.is_published ? 'Unpublish' : 'Publish'}
+                      >
+                        {announcement.is_published ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                      <button
+                        onClick={() => handleTogglePin(announcement)}
+                        className={cn(
+                          'p-1.5 rounded-lg transition-colors',
+                          announcement.is_pinned
+                            ? 'text-primary-400 hover:bg-primary-500/20'
+                            : 'text-secondary-400 hover:bg-secondary-600'
+                        )}
+                        title={announcement.is_pinned ? 'Unpin' : 'Pin'}
+                      >
+                        {announcement.is_pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                      </button>
+                      <button
+                        onClick={() => handleEdit(announcement)}
+                        className="p-1.5 rounded-lg text-blue-400 hover:bg-blue-500/20 transition-colors"
+                        title="Edit"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(announcement.announcement_id)}
+                        className="p-1.5 rounded-lg text-red-400 hover:bg-red-500/20 transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {(!data?.announcements || data.announcements.length === 0) && (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-secondary-400">
+                    No announcements yet. Click "New Announcement" to create one.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Modal */}
+      {showModal && (
+        <AnnouncementModal
+          announcement={editingAnnouncement}
+          onClose={() => setShowModal(false)}
+          onSave={handleSave}
+          isSaving={createAnnouncement.isPending || updateAnnouncement.isPending}
+        />
+      )}
+    </div>
+  )
+}
+
+// =============================================================================
 // MAIN ADMIN PAGE
 // =============================================================================
 
 export function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'users'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'news'>('overview')
   const [showInactive, setShowInactive] = useState(false)
 
   const { data: stats, refetch: refetchStats } = useSystemStats()
@@ -407,6 +800,18 @@ export function AdminPage() {
             >
               <Users className="inline h-4 w-4 mr-2" />
               Users
+            </button>
+            <button
+              onClick={() => setActiveTab('news')}
+              className={cn(
+                'pb-3 px-1 text-sm font-medium border-b-2 transition-colors',
+                activeTab === 'news'
+                  ? 'border-primary-500 text-primary-400'
+                  : 'border-transparent text-secondary-400 hover:text-secondary-200'
+              )}
+            >
+              <Newspaper className="inline h-4 w-4 mr-2" />
+              News
             </button>
           </div>
         </div>
@@ -504,6 +909,9 @@ export function AdminPage() {
             )}
           </div>
         )}
+
+        {/* News Tab */}
+        {activeTab === 'news' && <NewsManagement />}
       </div>
     </div>
   )

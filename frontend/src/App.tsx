@@ -8,7 +8,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { Layout } from '@/components/layout/Layout'
 import { LoginPage } from '@/pages/LoginPage'
-import { ChatPage } from '@/pages/ChatPage'
+import { HomePage } from '@/pages'
 import { SearchPage } from '@/pages/SearchPage'
 import { DocumentsPage } from '@/pages/DocumentsPage'
 import { ConnectorsPage } from '@/pages/ConnectorsPage'
@@ -50,9 +50,8 @@ function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/chat" replace />} />
-        <Route path="chat" element={<ChatPage />} />
-        <Route path="chat/:conversationId" element={<ChatPage />} />
+        <Route index element={<Navigate to="/home" replace />} />
+        <Route path="home" element={<HomePage />} />
         <Route path="search" element={<SearchPage />} />
         <Route path="documents" element={<DocumentsPage />} />
         <Route path="connectors" element={<ConnectorsPage />} />

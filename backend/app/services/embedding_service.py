@@ -16,6 +16,68 @@ from app.core.config import settings
 from app.infrastructure.database import Database
 
 
+# =============================================================================
+# ENRICHED EMBEDDING TEXT BUILDER
+# =============================================================================
+
+def build_embedding_text(
+    content: str,
+    document_title: Optional[str] = None,
+    section_title: Optional[str] = None,
+    page_number: Optional[int] = None,
+) -> str:
+    """
+    Build enriched text for embedding with document metadata context.
+
+    This improves retrieval accuracy by including document context:
+    - Document title helps distinguish content from different documents
+    - Section title provides topical context
+    - Page number adds structural reference
+
+    Format:
+        Document: {title}
+        Section: {section}
+        Page: {page}
+        Content: {content}
+
+    Example:
+        Document: BUILDING_AGENTIC_AI_SYSTEMS.pdf
+        Section: Chapter 3: Agent Architecture
+        Page: 45
+        Content: Agentic AI systems are characterized by...
+
+    Args:
+        content: The chunk content text
+        document_title: Document filename or title
+        section_title: Section/chapter heading (if extracted)
+        page_number: Page number in document
+
+    Returns:
+        Enriched text ready for embedding
+    """
+    parts = []
+
+    if document_title:
+        # Clean up filename for better embedding
+        clean_title = document_title.replace('_', ' ').replace('.pdf', '').replace('.docx', '')
+        parts.append(f"Document: {clean_title}")
+
+    if section_title:
+        parts.append(f"Section: {section_title}")
+
+    if page_number is not None:
+        parts.append(f"Page: {page_number}")
+
+    # Content is always included
+    parts.append(f"Content: {content}")
+
+    return "\n".join(parts)
+
+
+# =============================================================================
+# EMBEDDING CACHE
+# =============================================================================
+
 class EmbeddingCache:
     """In-memory cache for embeddings with TTL"""
 

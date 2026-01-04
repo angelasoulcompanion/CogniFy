@@ -1,5 +1,4 @@
 export { useAuth, useRequireAuth } from './useAuth'
-export { useChat, useChatStore } from './useChat'
 export {
   useDocuments,
   useDocument,
@@ -42,3 +41,17 @@ export {
   getRoleBadgeColor,
   getFileTypeIcon,
 } from './useAdmin'
+export {
+  useAnnouncements,
+  usePinnedAnnouncements,
+  useAnnouncement,
+  useAdminAnnouncements,
+  useCreateAnnouncement,
+  useUpdateAnnouncement,
+  useDeleteAnnouncement,
+  usePublishAnnouncement,
+  useUnpublishAnnouncement,
+  usePinAnnouncement,
+  useUnpinAnnouncement,
+  announcementKeys,
+} from './useAnnouncements'

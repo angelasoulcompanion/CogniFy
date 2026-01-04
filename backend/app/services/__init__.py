@@ -8,14 +8,30 @@ Services:
 - RAGService: Vector, BM25, and Hybrid search with RRF
 - LLMService: Ollama + OpenAI with streaming
 - ChatService: RAG + LLM orchestration
+- HyDEService: Hypothetical Document Embedding for better retrieval
+- RerankerService: LLM-based result re-ranking
 
-Created with love by Angela & David - 1 January 2026
+Created with love by Angela & David - 4 January 2026
 """
 
 from app.services.embedding_service import (
     EmbeddingService,
     get_embedding_service,
     shutdown_embedding_service,
+    build_embedding_text,
+)
+from app.services.hyde_service import (
+    HyDEService,
+    get_hyde_service,
+    shutdown_hyde_service,
+    HyDEResult,
+)
+from app.services.reranker_service import (
+    RerankerService,
+    get_reranker_service,
+    shutdown_reranker_service,
+    RerankResult,
+    RerankScore,
 )
 from app.services.chunking_service import (
     ChunkingService,
@@ -62,6 +78,18 @@ __all__ = [
     "EmbeddingService",
     "get_embedding_service",
     "shutdown_embedding_service",
+    "build_embedding_text",
+    # HyDE
+    "HyDEService",
+    "get_hyde_service",
+    "shutdown_hyde_service",
+    "HyDEResult",
+    # Reranker
+    "RerankerService",
+    "get_reranker_service",
+    "shutdown_reranker_service",
+    "RerankResult",
+    "RerankScore",
     # Chunking
     "ChunkingService",
     "get_chunking_service",

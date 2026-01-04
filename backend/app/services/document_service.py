@@ -16,7 +16,7 @@ from pathlib import Path
 from app.core.config import settings
 from app.domain.entities.document import Document, DocumentChunk, ProcessingStatus, FileType
 from app.infrastructure.repositories.document_repository import DocumentRepository, DocumentChunkRepository
-from app.services.embedding_service import get_embedding_service
+from app.services.embedding_service import get_embedding_service, build_embedding_text
 from app.services.chunking_service import get_chunking_service, Chunk
 
 logger = logging.getLogger(__name__)
@@ -549,9 +549,18 @@ class DocumentService:
             if on_progress:
                 await on_progress("embedding", 40)
 
-            # 3. Generate embeddings
-            print(f"🧠 Generating embeddings...")
-            chunk_texts = [chunk.content for chunk in chunks]
+            # 3. Generate embeddings with enriched context
+            print(f"🧠 Generating embeddings with document context...")
+            document_title = document.original_filename
+            chunk_texts = [
+                build_embedding_text(
+                    content=chunk.content,
+                    document_title=document_title,
+                    section_title=chunk.section_title,
+                    page_number=chunk.page_number
+                )
+                for chunk in chunks
+            ]
             embeddings = await self.embedding_service.get_embeddings_batch(
                 chunk_texts,
                 batch_size=5

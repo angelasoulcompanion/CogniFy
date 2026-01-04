@@ -729,6 +729,7 @@ class ChatRequest:
     model: Optional[str] = None
     expert: str = "general"
     stream: bool = True
+    system_prompt: Optional[str] = None  # Custom system prompt (overrides default)
 
 
 @dataclass
@@ -825,7 +826,12 @@ class ChatService:
             )
 
         # Build messages with question for language detection and expert role
-        messages = await self._build_messages(conversation, context, question=request.message, expert=request.expert)
+        messages = await self._build_messages(
+            conversation, context,
+            question=request.message,
+            expert=request.expert,
+            custom_system_prompt=request.system_prompt,
+        )
 
         # Get LLM config
         config = self._get_llm_config(request.provider, request.model)
@@ -954,7 +960,12 @@ class ChatService:
                 )
 
             # Build messages with question for language detection and expert role
-            messages = await self._build_messages(conversation, context, question=request.message, expert=request.expert)
+            messages = await self._build_messages(
+                conversation, context,
+                question=request.message,
+                expert=request.expert,
+                custom_system_prompt=request.system_prompt,
+            )
 
             # Get LLM config
             config = self._get_llm_config(request.provider, request.model)
@@ -1172,56 +1183,63 @@ class ChatService:
         question: str = "",
         expert: str = "general",
         max_history: int = 10,
+        custom_system_prompt: Optional[str] = None,
     ) -> List[Message]:
         """Build message list for LLM with proper language detection and expert role.
 
         Tries to use database prompts first, falls back to hardcoded templates.
+        If custom_system_prompt is provided, it will be used directly.
         """
         messages = []
         system_prompt = None
 
-        # Map frontend expert name to database expert_role
-        db_expert_role = PromptTemplates.EXPERT_ROLE_MAP.get(expert, "general")
+        # If custom system prompt provided, use it directly
+        if custom_system_prompt:
+            system_prompt = custom_system_prompt
+            print(f"📝 Using custom system prompt (length: {len(system_prompt)})")
+        else:
+            # Map frontend expert name to database expert_role
+            db_expert_role = PromptTemplates.EXPERT_ROLE_MAP.get(expert, "general")
 
-        # Try to get prompt from database first
-        try:
-            prompt_service = get_prompt_service()
+            # Try to get prompt from database first
+            try:
+                prompt_service = get_prompt_service()
 
-            if context:
-                # Try RAG prompt from database
-                db_prompt = await prompt_service.get_default_prompt(
-                    category="rag",
-                    expert_role=db_expert_role
-                )
-                if db_prompt:
-                    # Render prompt with context and query variables
-                    system_prompt = db_prompt.render({
-                        "context": context,
-                        "query": question,  # Some templates use {query}
-                    })
-                    # Increment usage count
-                    await prompt_service.increment_usage(db_prompt.template_id)
-                    print(f"📝 Using DB prompt: {db_prompt.name} (expert: {db_expert_role})")
-            else:
-                # Try system prompt from database (no context)
-                db_prompt = await prompt_service.get_default_prompt(
-                    category="system",
-                    expert_role=db_expert_role
-                )
-                if db_prompt:
-                    system_prompt = db_prompt.render({})
-                    await prompt_service.increment_usage(db_prompt.template_id)
-                    print(f"📝 Using DB prompt: {db_prompt.name}")
-        except Exception as e:
-            print(f"⚠️ Failed to get DB prompt, using hardcoded: {e}")
+                if context:
+                    # Try RAG prompt from database
+                    db_prompt = await prompt_service.get_default_prompt(
+                        category="rag",
+                        expert_role=db_expert_role
+                    )
+                    if db_prompt:
+                        # Render prompt with context and query variables
+                        system_prompt = db_prompt.render({
+                            "context": context,
+                            "query": question,  # Some templates use {query}
+                        })
+                        # Increment usage count
+                        await prompt_service.increment_usage(db_prompt.template_id)
+                        print(f"📝 Using DB prompt: {db_prompt.name} (expert: {db_expert_role})")
+                else:
+                    # Try system prompt from database (no context)
+                    db_prompt = await prompt_service.get_default_prompt(
+                        category="system",
+                        expert_role=db_expert_role
+                    )
+                    if db_prompt:
+                        system_prompt = db_prompt.render({})
+                        await prompt_service.increment_usage(db_prompt.template_id)
+                        print(f"📝 Using DB prompt: {db_prompt.name}")
+            except Exception as e:
+                print(f"⚠️ Failed to get DB prompt, using hardcoded: {e}")
 
-        # Fallback to hardcoded prompts if database prompt not found
-        if not system_prompt:
-            if context:
-                system_prompt = PromptTemplates.get_rag_prompt(context, question=question, expert=expert)
-            else:
-                system_prompt = PromptTemplates.get_no_context_prompt(question=question, expert=expert)
-            print(f"📝 Using hardcoded prompt (expert: {expert})")
+            # Fallback to hardcoded prompts if database prompt not found
+            if not system_prompt:
+                if context:
+                    system_prompt = PromptTemplates.get_rag_prompt(context, question=question, expert=expert)
+                else:
+                    system_prompt = PromptTemplates.get_no_context_prompt(question=question, expert=expert)
+                print(f"📝 Using hardcoded prompt (expert: {expert})")
 
         messages.append(Message(role=MessageRole.SYSTEM, content=system_prompt))
 

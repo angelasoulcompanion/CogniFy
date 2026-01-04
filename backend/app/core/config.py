@@ -62,11 +62,21 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
 
-    # RAG Settings
+    # RAG Settings - Chunking
     RAG_CHUNK_SIZE: int = 500
-    RAG_CHUNK_OVERLAP: int = 50
+    RAG_CHUNK_OVERLAP: int = 100  # Increased for better context (was 50)
     RAG_DEFAULT_TOP_K: int = 10
     RAG_DEFAULT_THRESHOLD: float = 0.3
+
+    # RAG Settings - HyDE (Hypothetical Document Embedding)
+    HYDE_ENABLED: bool = True
+    HYDE_MODEL: str = "qwen2.5:7b"  # Fast model for hypothesis generation
+
+    # RAG Settings - Re-ranking
+    RERANK_ENABLED: bool = True
+    RERANK_MODEL: str = "qwen2.5:7b"  # LLM for scoring relevance
+    RERANK_TOP_N: int = 20  # Fetch this many before re-ranking
+    RERANK_RETURN_K: int = 5  # Return this many after re-ranking
 
     # Logging
     LOG_LEVEL: str = "INFO"

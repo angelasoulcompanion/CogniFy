@@ -5,6 +5,6 @@
  */
 
 export { LoginPage } from './LoginPage'
-export { ChatPage } from './ChatPage'
 export { DocumentsPage } from './DocumentsPage'
 export { ConnectorsPage } from './ConnectorsPage'
+export { default as HomePage } from './HomePage'

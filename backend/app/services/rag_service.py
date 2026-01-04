@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from enum import Enum
 
 from app.services.embedding_service import get_embedding_service
+from app.services.hyde_service import get_hyde_service
+from app.services.reranker_service import get_reranker_service
 from app.infrastructure.database import Database
 
 
@@ -50,6 +52,9 @@ class SearchResult:
     bm25_rank: Optional[int] = None
     rrf_score: Optional[float] = None
 
+    # For re-ranking
+    rerank_score: Optional[float] = None
+
 
 @dataclass
 class RAGSettings:
@@ -63,6 +68,13 @@ class RAGSettings:
     rrf_k: int = 60                        # RRF constant (default 60)
     include_metadata: bool = True          # Include document metadata
 
+    # HyDE settings
+    hyde_enabled: bool = True              # Use Hypothetical Document Embedding
+    # Re-ranking settings
+    rerank_enabled: bool = True            # Use LLM re-ranking
+    rerank_top_n: int = 20                 # Get this many results before reranking
+    rerank_return_k: int = 5               # Return this many after reranking
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "RAGSettings":
         """Create settings from dictionary"""
@@ -75,6 +87,10 @@ class RAGSettings:
             vector_weight=data.get("vector_weight", 0.6),
             rrf_k=data.get("rrf_k", 60),
             include_metadata=data.get("include_metadata", True),
+            hyde_enabled=data.get("hyde_enabled", True),
+            rerank_enabled=data.get("rerank_enabled", True),
+            rerank_top_n=data.get("rerank_top_n", 20),
+            rerank_return_k=data.get("rerank_return_k", 5),
         )
 
 
@@ -86,10 +102,14 @@ class RAGService:
     - Vector search using pgvector
     - BM25 keyword search using PostgreSQL full-text
     - Hybrid search combining both with RRF fusion
+    - HyDE (Hypothetical Document Embedding)
+    - LLM-based Re-ranking
     """
 
     def __init__(self):
         self.embedding_service = get_embedding_service()
+        self.hyde_service = get_hyde_service()
+        self.reranker_service = get_reranker_service()
 
     # =========================================================================
     # MAIN SEARCH API
@@ -105,6 +125,10 @@ class RAGService:
         """
         Main search API - routes to appropriate search method
 
+        Enhanced with:
+        - HyDE (Hypothetical Document Embedding) for better semantic matching
+        - LLM-based re-ranking for improved relevance
+
         Args:
             query: Search query text
             settings: RAG settings (uses defaults if not provided)
@@ -116,27 +140,99 @@ class RAGService:
         """
         settings = settings or RAGSettings()
 
+        # Adjust max_chunks if re-ranking is enabled (fetch more for re-ranking)
+        search_settings = settings
+        if settings.rerank_enabled:
+            search_settings = RAGSettings(
+                search_method=settings.search_method,
+                similarity_method=settings.similarity_method,
+                similarity_threshold=settings.similarity_threshold,
+                max_chunks=settings.rerank_top_n,  # Fetch more for re-ranking
+                bm25_weight=settings.bm25_weight,
+                vector_weight=settings.vector_weight,
+                rrf_k=settings.rrf_k,
+                include_metadata=settings.include_metadata,
+                hyde_enabled=settings.hyde_enabled,
+                rerank_enabled=False,  # Don't recurse
+            )
+
+        # Route to appropriate search method
         if settings.search_method == SearchMethod.VECTOR:
-            return await self.vector_search(
+            results = await self.vector_search(
                 query=query,
-                settings=settings,
+                settings=search_settings,
                 user_id=user_id,
                 document_ids=document_ids,
             )
         elif settings.search_method == SearchMethod.BM25:
-            return await self.bm25_search(
+            results = await self.bm25_search(
                 query=query,
-                settings=settings,
+                settings=search_settings,
                 user_id=user_id,
                 document_ids=document_ids,
             )
         else:  # HYBRID
-            return await self.hybrid_search(
+            results = await self.hybrid_search(
                 query=query,
-                settings=settings,
+                settings=search_settings,
                 user_id=user_id,
                 document_ids=document_ids,
             )
+
+        # Apply LLM re-ranking if enabled
+        if settings.rerank_enabled and len(results) > settings.rerank_return_k:
+            results = await self._rerank_results(
+                query=query,
+                results=results,
+                top_k=settings.rerank_return_k,
+            )
+
+        return results
+
+    async def _rerank_results(
+        self,
+        query: str,
+        results: List[SearchResult],
+        top_k: int,
+    ) -> List[SearchResult]:
+        """Apply LLM re-ranking to results"""
+        # Convert SearchResult to dict for reranker
+        results_dict = [
+            {
+                "chunk_id": r.chunk_id,
+                "document_id": r.document_id,
+                "content": r.content,
+                "score": r.score,
+                "page_number": r.page_number,
+                "section_title": r.section_title,
+                "document_title": r.document_title,
+                "document_filename": r.document_filename,
+            }
+            for r in results
+        ]
+
+        # Re-rank
+        reranked_dict = await self.reranker_service.rerank(
+            query=query,
+            results=results_dict,
+            top_k=top_k,
+        )
+
+        # Convert back to SearchResult
+        return [
+            SearchResult(
+                chunk_id=r["chunk_id"],
+                document_id=r["document_id"],
+                content=r["content"],
+                score=r["score"],
+                page_number=r.get("page_number"),
+                section_title=r.get("section_title"),
+                document_title=r.get("document_title"),
+                document_filename=r.get("document_filename"),
+                rerank_score=r.get("rerank_score"),
+            )
+            for r in reranked_dict
+        ]
 
     # =========================================================================
     # VECTOR SEARCH (pgvector)
@@ -152,12 +248,22 @@ class RAGService:
         """
         Pure vector similarity search using pgvector
 
-        Uses embedding to find semantically similar chunks
+        Uses embedding to find semantically similar chunks.
+        With HyDE enabled, generates hypothetical answer first for better matching.
         """
         settings = settings or RAGSettings()
 
-        # Get query embedding
-        query_embedding = await self.embedding_service.get_embedding(query)
+        # Get query embedding (with optional HyDE)
+        if settings.hyde_enabled:
+            # Use HyDE: generate hypothetical answer, then embed that
+            query_embedding, hypothetical = await self.hyde_service.get_search_embedding(
+                query=query,
+                use_hyde=True,
+            )
+        else:
+            # Direct query embedding
+            query_embedding = await self.embedding_service.get_embedding(query)
+
         if not query_embedding:
             return []
 
@@ -211,7 +317,7 @@ class RAGService:
         params.append(settings.max_chunks)
 
         # Execute
-        pool = await Database.get_pool()
+        pool = Database.get_pool()
         rows = await pool.fetch(sql, *params)
 
         return [
@@ -310,7 +416,7 @@ class RAGService:
         params.append(settings.max_chunks)
 
         # Execute
-        pool = await Database.get_pool()
+        pool = Database.get_pool()
         rows = await pool.fetch(sql, *params)
 
         return [

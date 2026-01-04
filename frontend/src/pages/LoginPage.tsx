@@ -18,7 +18,7 @@ export function LoginPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/chat')
+      navigate('/home')
     }
   }, [isAuthenticated, navigate])
 
@@ -26,7 +26,7 @@ export function LoginPage() {
     e.preventDefault()
     const success = await login(username, password)
     if (success) {
-      navigate('/chat')
+      navigate('/home')
     }
   }
 

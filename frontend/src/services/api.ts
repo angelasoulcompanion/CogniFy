@@ -452,70 +452,6 @@ export const searchApi = {
 }
 
 // =============================================================================
-// CHAT API
-// =============================================================================
-
-export const chatApi = {
-  // Non-streaming chat
-  complete: async (request: {
-    message: string;
-    conversationId?: string;
-    ragEnabled?: boolean;
-    provider?: string;
-    model?: string;
-  }) => {
-    const response = await api.post('/v1/chat/complete', {
-      message: request.message,
-      conversation_id: request.conversationId,
-      rag_enabled: request.ragEnabled ?? true,
-      provider: request.provider || 'ollama',
-      model: request.model,
-    })
-    return response.data
-  },
-
-  // List conversations
-  listConversations: async (limit = 20, offset = 0) => {
-    const response = await api.get('/v1/chat/conversations', {
-      params: { limit, offset },
-    })
-    return response.data
-  },
-
-  // Get conversation
-  getConversation: async (conversationId: string) => {
-    const response = await api.get(`/v1/chat/conversations/${conversationId}`)
-    return response.data
-  },
-
-  // Get messages
-  getMessages: async (conversationId: string, limit = 50) => {
-    const response = await api.get(`/v1/chat/conversations/${conversationId}/messages`, {
-      params: { limit },
-    })
-    return response.data
-  },
-
-  // Delete conversation
-  deleteConversation: async (conversationId: string) => {
-    const response = await api.delete(`/v1/chat/conversations/${conversationId}`)
-    return response.data
-  },
-
-  // Get available models
-  getModels: async () => {
-    const response = await api.get('/v1/chat/models')
-    return response.data
-  },
-
-  // Health check
-  health: async () => {
-    const response = await api.get('/v1/chat/health')
-    return response.data
-  },
-}
-
-// =============================================================================
 // HEALTH API
 // =============================================================================
 
@@ -784,6 +720,93 @@ export const promptsApi = {
   // Render prompt with variables
   render: async (templateId: string, variables: Record<string, string>): Promise<{ rendered: string }> => {
     const response = await api.post(`/v1/prompts/${templateId}/render`, variables)
+    return response.data
+  },
+}
+
+// =============================================================================
+// ANNOUNCEMENTS API
+// =============================================================================
+
+import type {
+  Announcement,
+  AnnouncementListResponse,
+  CreateAnnouncementRequest,
+  UpdateAnnouncementRequest,
+} from '@/types'
+
+export const announcementsApi = {
+  // List published announcements (for users)
+  list: async (params?: {
+    skip?: number
+    limit?: number
+    category?: string
+  }): Promise<AnnouncementListResponse> => {
+    const response = await api.get('/v1/announcements', { params })
+    return response.data
+  },
+
+  // Get pinned announcements
+  getPinned: async (limit = 5): Promise<Announcement[]> => {
+    const response = await api.get('/v1/announcements/pinned', {
+      params: { limit },
+    })
+    return response.data
+  },
+
+  // Get single announcement
+  get: async (announcementId: string): Promise<Announcement> => {
+    const response = await api.get(`/v1/announcements/${announcementId}`)
+    return response.data
+  },
+
+  // Admin: List all announcements (including drafts)
+  listAll: async (params?: {
+    skip?: number
+    limit?: number
+  }): Promise<AnnouncementListResponse> => {
+    const response = await api.get('/v1/announcements/admin/all', { params })
+    return response.data
+  },
+
+  // Admin: Create announcement
+  create: async (data: CreateAnnouncementRequest): Promise<Announcement> => {
+    const response = await api.post('/v1/announcements', data)
+    return response.data
+  },
+
+  // Admin: Update announcement
+  update: async (announcementId: string, data: UpdateAnnouncementRequest): Promise<Announcement> => {
+    const response = await api.put(`/v1/announcements/${announcementId}`, data)
+    return response.data
+  },
+
+  // Admin: Delete announcement
+  delete: async (announcementId: string): Promise<void> => {
+    await api.delete(`/v1/announcements/${announcementId}`)
+  },
+
+  // Admin: Publish announcement
+  publish: async (announcementId: string): Promise<Announcement> => {
+    const response = await api.post(`/v1/announcements/${announcementId}/publish`)
+    return response.data
+  },
+
+  // Admin: Unpublish announcement
+  unpublish: async (announcementId: string): Promise<Announcement> => {
+    const response = await api.post(`/v1/announcements/${announcementId}/unpublish`)
+    return response.data
+  },
+
+  // Admin: Pin announcement
+  pin: async (announcementId: string): Promise<Announcement> => {
+    const response = await api.post(`/v1/announcements/${announcementId}/pin`)
+    return response.data
+  },
+
+  // Admin: Unpin announcement
+  unpin: async (announcementId: string): Promise<Announcement> => {
+    const response = await api.post(`/v1/announcements/${announcementId}/unpin`)
     return response.data
   },
 }

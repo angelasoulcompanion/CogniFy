@@ -121,7 +121,7 @@ export interface SearchResponse {
 }
 
 // =============================================================================
-// CHAT TYPES
+// RAG TYPES (used by Search)
 // =============================================================================
 
 export interface RAGSettings {
@@ -131,17 +131,6 @@ export interface RAGSettings {
   search_method: 'vector' | 'bm25' | 'hybrid';
   bm25_weight: number;
   vector_weight: number;
-}
-
-export interface ChatRequest {
-  message: string;
-  conversation_id?: string;
-  rag_enabled?: boolean;
-  rag_settings?: RAGSettings;
-  document_ids?: string[];
-  provider?: 'ollama' | 'openai';
-  model?: string;
-  stream?: boolean;
 }
 
 export interface SourceReference {
@@ -154,130 +143,9 @@ export interface SourceReference {
   score: number;
 }
 
-export interface ChatMessage {
-  message_id: string;
-  conversation_id: string;
-  message_type: 'user' | 'assistant' | 'system';
-  content: string;
-  sources: SourceReference[] | null;
-  response_time_ms: number | null;
-  created_at: string;
-  isStreaming?: boolean;
-}
-
-export interface Conversation {
-  conversation_id: string;
-  user_id: string | null;
-  title: string | null;
-  model_provider: string;
-  model_name: string;
-  rag_enabled: boolean;
-  message_count: number;
-  created_at: string;
-  updated_at: string;
-}
-
-// =============================================================================
-// SSE EVENT TYPES
-// =============================================================================
-
-export interface SSESessionEvent {
-  type: 'session';
-  conversation_id: string;
-  model: string;
-  provider: string;
-}
-
-export interface SSESearchStartEvent {
-  type: 'search_start';
-  query: string;
-}
-
-export interface SSESearchResultsEvent {
-  type: 'search_results';
-  count: number;
-  sources: Array<{
-    document: string;
-    page: number | null;
-    score: number;
-  }>;
-}
-
-export interface SSEContentEvent {
-  type: 'content';
-  content: string;
-}
-
-export interface SSEContentCompleteEvent {
-  type: 'content_complete';
-  content: string;
-}
-
-// Structured Response Types
-export interface StructuredContentItem {
-  type: 'text' | 'fact' | 'list_item';
-  text?: string;
-  label?: string;
-  value?: string;
-}
-
-export interface StructuredSection {
-  heading: string;
-  items: StructuredContentItem[];
-}
-
-export interface StructuredResponse {
-  title: string;
-  sections: StructuredSection[];
-  sources_used: number[];
-  raw_text?: string;
-}
-
-export interface SSEStructuredResponseEvent {
-  type: 'structured_response';
-  structured: StructuredResponse;
-}
-
-export interface SSESourcesEvent {
-  type: 'sources';
-  sources: SourceReference[];
-}
-
-export interface SSEDoneEvent {
-  type: 'done';
-  message_id: string;
-  response_time_ms: number;
-  final_content?: string;  // Post-processed content from backend
-}
-
-export interface SSEErrorEvent {
-  type: 'error';
-  error: string;
-}
-
-export type SSEEvent =
-  | SSESessionEvent
-  | SSESearchStartEvent
-  | SSESearchResultsEvent
-  | SSEContentEvent
-  | SSEContentCompleteEvent
-  | SSEStructuredResponseEvent
-  | SSESourcesEvent
-  | SSEDoneEvent
-  | SSEErrorEvent;
-
 // =============================================================================
 // UI STATE TYPES
 // =============================================================================
-
-export interface ChatState {
-  conversations: Conversation[];
-  currentConversation: Conversation | null;
-  messages: ChatMessage[];
-  isStreaming: boolean;
-  streamingContent: string;
-  sources: SourceReference[];
-}
 
 export interface AppState {
   sidebarOpen: boolean;
@@ -486,4 +354,47 @@ export interface SearchStats {
     misses: number;
     hit_rate: string;
   };
+}
+
+// =============================================================================
+// ANNOUNCEMENT TYPES
+// =============================================================================
+
+export type AnnouncementCategory = 'general' | 'important' | 'update' | 'event';
+
+export interface Announcement {
+  announcement_id: string;
+  title: string;
+  content: string;  // Markdown content
+  cover_image_url: string | null;
+  category: AnnouncementCategory;
+  is_pinned: boolean;
+  is_published: boolean;
+  published_at: string | null;
+  created_by: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface AnnouncementListResponse {
+  announcements: Announcement[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
+export interface CreateAnnouncementRequest {
+  title: string;
+  content: string;
+  cover_image_url?: string | null;
+  category?: AnnouncementCategory;
+  is_published?: boolean;
+  is_pinned?: boolean;
+}
+
+export interface UpdateAnnouncementRequest {
+  title?: string;
+  content?: string;
+  cover_image_url?: string | null;
+  category?: AnnouncementCategory;
 }

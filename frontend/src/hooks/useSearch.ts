@@ -264,12 +264,32 @@ export const useAskAIStore = create<AskAIState>()((set) => ({
   clearAIAnswer: () => set({ answer: null, aiError: null }),
 }))
 
+// Expert system prompts
+const EXPERT_PROMPTS: Record<string, string> = {
+  general: 'คุณเป็นผู้ช่วย AI ทั่วไปที่ตอบคำถามจากเอกสาร',
+  financial_analyst: 'คุณเป็นนักวิเคราะห์การเงินผู้เชี่ยวชาญ ตอบคำถามเกี่ยวกับการเงิน งบการเงิน และการวิเคราะห์ธุรกิจ',
+  legal_expert: 'คุณเป็นผู้เชี่ยวชาญด้านกฎหมาย ตอบคำถามเกี่ยวกับสัญญา กฎระเบียบ และการปฏิบัติตามกฎหมาย',
+  technical_writer: 'คุณเป็นนักเขียนเทคนิคผู้เชี่ยวชาญ ตอบคำถามเกี่ยวกับเอกสารทางเทคนิค และ specifications',
+  data_analyst: 'คุณเป็นนักวิเคราะห์ข้อมูลผู้เชี่ยวชาญ ตอบคำถามเกี่ยวกับข้อมูล สถิติ และ patterns',
+  business_consultant: 'คุณเป็นที่ปรึกษาธุรกิจผู้เชี่ยวชาญ ตอบคำถามเกี่ยวกับกลยุทธ์ การดำเนินงาน และการบริหาร',
+  researcher: 'คุณเป็นนักวิจัยผู้เชี่ยวชาญ ตอบคำถามอย่างเป็นวิชาการ พร้อมอ้างอิงข้อมูลจากเอกสาร',
+  ai_engineer: 'คุณเป็นวิศวกร AI ผู้เชี่ยวชาญ ตอบคำถามเกี่ยวกับ Machine Learning, Deep Learning, LLMs และระบบ AI',
+}
+
+export interface AskAIParams {
+  provider: string
+  model: string
+  expert: string
+}
+
 export function useAskAI() {
   const { setAnswer, setAskingAI, setAIError } = useAskAIStore()
   const { query, results } = useSearchStore()
 
   const askAIMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (params: AskAIParams) => {
+      const { provider, model, expert } = params
+
       if (!query.trim() || results.length === 0) return null
 
       // Build context from search results
@@ -278,22 +298,21 @@ export function useAskAI() {
         .map((r, i) => `[${i + 1}] ${r.document_name}${r.page_number ? ` (p.${r.page_number})` : ''}:\n${r.content}`)
         .join('\n\n')
 
-      // Create structured prompt
-      const systemPrompt = `คุณเป็นผู้ช่วย AI ที่ตอบคำถามจากเอกสาร ให้ตอบเป็นภาษาไทยหรืออังกฤษตามคำถาม
+      // Get expert-specific intro
+      const expertIntro = EXPERT_PROMPTS[expert] || EXPERT_PROMPTS.general
 
-รูปแบบการตอบ:
-1. ตอบตรงประเด็น ใช้ข้อมูลจาก sources เท่านั้น
-2. จัดโครงสร้างเป็นหัวข้อหลักและ bullet points
-3. ถ้าไม่พบข้อมูลให้บอกตรงๆ
+      // Create structured prompt with expert role
+      const systemPrompt = `${expertIntro}
 
-ตัวอย่างรูปแบบ:
-## คำตอบ
-**หัวข้อหลัก 1**
-- รายละเอียดข้อ 1
-- รายละเอียดข้อ 2
+## กฎสำคัญ (CRITICAL RULES):
+- ตอบจาก "ข้อมูลจากเอกสาร" ที่ให้มาด้านล่าง **เท่านั้น**
+- **ห้าม** ใช้ความรู้ภายนอกหรือ training data ของคุณ
+- **ห้าม** สมมติหรือเดาข้อมูลที่ไม่มีในเอกสาร
+- **ห้าม** ตอบซ้ำหรือพูดเรื่องเดิมหลายครั้ง
+- ถ้าไม่พบข้อมูลในเอกสาร ให้ตอบว่า "ไม่พบข้อมูลในเอกสารที่ให้"
 
-**หัวข้อหลัก 2**
-- รายละเอียด
+## รูปแบบการตอบ:
+ตอบเป็นย่อหน้า 2-3 ย่อหน้า แต่ละย่อหน้าพูดเรื่องต่างกัน อ้างอิง source [1], [2] ท้ายประโยค
 
 ## สรุป
 สรุปสั้นๆ 1-2 ประโยค`
@@ -305,8 +324,10 @@ ${context}
 
 กรุณาตอบคำถามโดยใช้ข้อมูลข้างต้น จัดรูปแบบเป็นหัวข้อและ bullet points`
 
-      // Call chat API (non-streaming for simplicity)
-      const response = await fetch('/api/v1/chat/complete', {
+      console.log('[Ask AI] Using model:', model, 'provider:', provider, 'expert:', expert)
+
+      // Call AI API (simple completion without conversation)
+      const response = await fetch('/api/v1/ai/complete', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -315,9 +336,8 @@ ${context}
         body: JSON.stringify({
           message: userMessage,
           system_prompt: systemPrompt,
-          rag_enabled: false, // We already have context
-          provider: 'ollama',
-          model: 'llama3.2:1b',
+          provider: provider,
+          model: model,
         }),
       })
 
