@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { Logo, LogoIcon } from '@/components/Logo'
 import {
   MessageSquare,
+  Search,
   FileText,
   Database,
   LogOut,
@@ -31,6 +32,7 @@ export function Layout() {
 
   const navItems = [
     { to: '/chat', icon: MessageSquare, label: 'Chat' },
+    { to: '/search', icon: Search, label: 'Search' },
     { to: '/documents', icon: FileText, label: 'Documents' },
     { to: '/connectors', icon: Database, label: 'Connectors' },
     // Admin links only for admin users

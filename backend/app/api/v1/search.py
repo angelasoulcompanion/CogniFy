@@ -419,8 +419,8 @@ async def get_search_stats(
     chunk_stats = await pool.fetchrow("""
         SELECT
             COUNT(*) as total_chunks,
-            COUNT(embedding) as chunks_with_embeddings,
-            COUNT(DISTINCT document_id) as documents_indexed
+            COUNT(c.embedding) as chunks_with_embeddings,
+            COUNT(DISTINCT c.document_id) as documents_indexed
         FROM document_chunks c
         JOIN documents d ON c.document_id = d.document_id
         WHERE d.is_deleted = false

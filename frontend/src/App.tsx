@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { Layout } from '@/components/layout/Layout'
 import { LoginPage } from '@/pages/LoginPage'
 import { ChatPage } from '@/pages/ChatPage'
+import { SearchPage } from '@/pages/SearchPage'
 import { DocumentsPage } from '@/pages/DocumentsPage'
 import { ConnectorsPage } from '@/pages/ConnectorsPage'
 import { AdminPage } from '@/pages/AdminPage'
@@ -52,6 +53,7 @@ function App() {
         <Route index element={<Navigate to="/chat" replace />} />
         <Route path="chat" element={<ChatPage />} />
         <Route path="chat/:conversationId" element={<ChatPage />} />
+        <Route path="search" element={<SearchPage />} />
         <Route path="documents" element={<DocumentsPage />} />
         <Route path="connectors" element={<ConnectorsPage />} />
         <Route path="admin" element={<AdminPage />} />

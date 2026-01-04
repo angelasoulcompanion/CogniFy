@@ -416,3 +416,74 @@ export interface ActivityItem {
   user_email: string;
   timestamp: string;
 }
+
+// =============================================================================
+// SEARCH CONFIG TYPES (for SearchPage)
+// =============================================================================
+
+export type SearchType = 'vector' | 'bm25' | 'hybrid';
+export type SimilarityMethod = 'cosine' | 'euclidean' | 'dot';
+export type EmbeddingModel = 'bge-m3' | 'mxbai-embed-large' | 'text-embedding-3-small';
+
+export interface SearchConfig {
+  // Model
+  embeddingModel: EmbeddingModel;
+
+  // Search Type
+  searchType: SearchType;
+
+  // Similarity (for vector/hybrid)
+  similarityMethod: SimilarityMethod;
+
+  // Parameters
+  threshold: number;        // 0.0 - 1.0, default 0.3
+  maxResults: number;       // 1 - 100, default 10
+
+  // Hybrid specific
+  bm25Weight: number;       // 0.0 - 1.0, default 0.4
+  vectorWeight: number;     // 0.0 - 1.0, default 0.6
+  rrfK: number;             // 1 - 100, default 60
+
+  // Filters
+  documentIds: string[] | null;
+  includeContent: boolean;
+}
+
+export interface SearchState {
+  // Query
+  query: string;
+  recentQueries: string[];
+
+  // Configuration
+  config: SearchConfig;
+
+  // Results
+  results: SearchResult[];
+  isLoading: boolean;
+  error: string | null;
+  searchTime: number | null;
+
+  // Actions
+  setQuery: (query: string) => void;
+  setConfig: (config: Partial<SearchConfig>) => void;
+  setResults: (results: SearchResult[]) => void;
+  setLoading: (loading: boolean) => void;
+  setError: (error: string | null) => void;
+  setSearchTime: (time: number | null) => void;
+  clearResults: () => void;
+  addRecentQuery: (query: string) => void;
+}
+
+export interface SearchStats {
+  chunks: {
+    total: number;
+    with_embeddings: number;
+    documents_indexed: number;
+  };
+  cache: {
+    size: number;
+    hits: number;
+    misses: number;
+    hit_rate: string;
+  };
+}

@@ -330,6 +330,7 @@ export const documentsApi = {
 // =============================================================================
 
 export const searchApi = {
+  // Basic semantic search
   semantic: async (query: string, options?: {
     limit?: number;
     threshold?: number;
@@ -344,6 +345,27 @@ export const searchApi = {
     return response.data
   },
 
+  // Enhanced semantic search with similarity method
+  semanticAdvanced: async (options: {
+    query: string;
+    limit?: number;
+    threshold?: number;
+    similarityMethod?: 'cosine' | 'euclidean' | 'dot';
+    documentIds?: string[];
+    includeContent?: boolean;
+  }) => {
+    const response = await api.post('/v1/search', {
+      query: options.query,
+      limit: options.limit ?? 10,
+      threshold: options.threshold ?? 0.3,
+      similarity_method: options.similarityMethod ?? 'cosine',
+      document_ids: options.documentIds,
+      include_content: options.includeContent ?? true,
+    })
+    return response.data
+  },
+
+  // Basic hybrid search
   hybrid: async (query: string, options?: {
     limit?: number;
     threshold?: number;
@@ -362,6 +384,29 @@ export const searchApi = {
     return response.data
   },
 
+  // Enhanced hybrid search with RRF-K
+  hybridAdvanced: async (options: {
+    query: string;
+    limit?: number;
+    threshold?: number;
+    bm25Weight?: number;
+    vectorWeight?: number;
+    rrfK?: number;
+    documentIds?: string[];
+  }) => {
+    const response = await api.post('/v1/search/hybrid', {
+      query: options.query,
+      limit: options.limit ?? 10,
+      threshold: options.threshold ?? 0.3,
+      bm25_weight: options.bm25Weight ?? 0.4,
+      vector_weight: options.vectorWeight ?? 0.6,
+      rrf_k: options.rrfK ?? 60,
+      document_ids: options.documentIds,
+    })
+    return response.data
+  },
+
+  // BM25 keyword search
   bm25: async (query: string, options?: {
     limit?: number;
     documentIds?: string[];
@@ -374,6 +419,21 @@ export const searchApi = {
     return response.data
   },
 
+  // Find similar chunks
+  findSimilar: async (chunkId: string, limit?: number) => {
+    const response = await api.post(`/v1/search/similar/${chunkId}`, null, {
+      params: { limit: limit ?? 5 },
+    })
+    return response.data
+  },
+
+  // Get search stats
+  getStats: async () => {
+    const response = await api.get('/v1/search/stats')
+    return response.data
+  },
+
+  // Build RAG context
   context: async (query: string, options?: {
     maxChunks?: number;
     maxContextLength?: number;
