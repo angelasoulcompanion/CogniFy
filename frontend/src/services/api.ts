@@ -59,6 +59,8 @@ export const clearAuth = () => {
   sessionStorage.removeItem(TOKEN_KEY)
   sessionStorage.removeItem(TOKEN_EXPIRY_KEY)
   sessionStorage.removeItem(USER_KEY)
+  // IMPORTANT: Clear zustand persisted auth state to prevent auto-redirect to home
+  sessionStorage.removeItem('cognify-auth')
 }
 
 // Helper: Get stored tokens
