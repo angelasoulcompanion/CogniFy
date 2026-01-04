@@ -65,10 +65,25 @@ async def ai_complete(
     except ValueError:
         provider = LLMProvider.OLLAMA
 
-    # Build config with defaults for None values
+    # Determine model
+    model = request.model or ("llama3.2:1b" if provider == LLMProvider.OLLAMA else "gpt-4o-mini")
+
+    # Validate model exists
+    available_models = await llm_service.list_models()
+    provider_key = "ollama" if provider == LLMProvider.OLLAMA else "openai"
+    provider_models = available_models.get(provider_key, [])
+
+    if model not in provider_models:
+        provider_name = "Ollama" if provider == LLMProvider.OLLAMA else "OpenAI"
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Model '{model}' is not available in {provider_name}. Available models: {', '.join(provider_models[:5]) if provider_models else 'none (is the service running?)'}"
+        )
+
+    # Build config
     config = LLMConfig(
         provider=provider,
-        model=request.model or ("llama3.2:1b" if provider == LLMProvider.OLLAMA else "gpt-4o-mini"),
+        model=model,
         temperature=request.temperature,
         max_tokens=request.max_tokens or 2048,
     )
