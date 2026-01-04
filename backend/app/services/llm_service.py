@@ -436,13 +436,9 @@ class LLMService:
             llm_provider = self._get_provider(primary_provider)
             return await llm_provider.generate(messages, config)
         except LLMError as e:
-            # Try fallback
-            fallback = self._get_fallback_provider(primary_provider)
-            if fallback:
-                print(f"Primary provider failed, trying fallback: {fallback}")
-                llm_provider = self._get_provider(fallback)
-                return await llm_provider.generate(messages, config)
-            raise e
+            # Don't fallback automatically - let frontend know which provider failed
+            provider_name = "Ollama" if primary_provider == LLMProvider.OLLAMA else "OpenAI"
+            raise LLMError(f"{provider_name} is not available. Please check if {provider_name} is running or try selecting a different model.")
 
     async def stream(
         self,
@@ -511,14 +507,6 @@ class LLMService:
 
         async for chunk in self.stream(messages, config):
             yield chunk
-
-    def _get_fallback_provider(self, primary: LLMProvider) -> Optional[LLMProvider]:
-        """Get fallback provider"""
-        if primary == LLMProvider.OLLAMA and LLMProvider.OPENAI in self._providers:
-            return LLMProvider.OPENAI
-        elif primary == LLMProvider.OPENAI and LLMProvider.OLLAMA in self._providers:
-            return LLMProvider.OLLAMA
-        return None
 
     async def health_check(self) -> Dict[str, Any]:
         """Check all providers health"""
