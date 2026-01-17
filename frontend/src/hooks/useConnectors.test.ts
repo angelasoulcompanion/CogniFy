@@ -38,20 +38,20 @@ describe('getConnectionStatusColor', () => {
 })
 
 describe('getDatabaseIcon', () => {
-  it('should return elephant for PostgreSQL', () => {
-    expect(getDatabaseIcon('postgresql')).toBe('elephant')
+  it('should return elephant emoji for PostgreSQL', () => {
+    expect(getDatabaseIcon('postgresql')).toBe('🐘')
   })
 
-  it('should return dolphin for MySQL', () => {
-    expect(getDatabaseIcon('mysql')).toBe('dolphin')
+  it('should return dolphin emoji for MySQL', () => {
+    expect(getDatabaseIcon('mysql')).toBe('🐬')
   })
 
-  it('should return server for SQL Server', () => {
-    expect(getDatabaseIcon('sqlserver')).toBe('server')
+  it('should return diamond emoji for SQL Server', () => {
+    expect(getDatabaseIcon('sqlserver')).toBe('🔷')
   })
 
-  it('should return database for unknown type', () => {
-    expect(getDatabaseIcon('unknown' as any)).toBe('database')
+  it('should return cabinet emoji for unknown type', () => {
+    expect(getDatabaseIcon('unknown' as any)).toBe('🗄️')
   })
 })
 

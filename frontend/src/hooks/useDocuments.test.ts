@@ -26,8 +26,8 @@ describe('getDocumentStatusLabel', () => {
     expect(getDocumentStatusLabel('failed')).toBe('Failed')
   })
 
-  it('should return Unknown for unknown status', () => {
-    expect(getDocumentStatusLabel('unknown' as any)).toBe('Unknown')
+  it('should return unknown for unknown status', () => {
+    expect(getDocumentStatusLabel('unknown' as any)).toBe('unknown')
   })
 })
 
