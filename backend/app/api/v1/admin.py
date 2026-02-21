@@ -202,7 +202,7 @@ async def list_users(
 )
 async def get_usage_metrics(
     days: int = Query(30, ge=1, le=365),
-    interval: str = Query("day", regex="^(day|week|month)$"),
+    interval: str = Query("day", pattern="^(day|week|month)$"),
     current_user: TokenPayload = Depends(require_admin),
 ):
     """

@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     # App Info
     APP_NAME: str = "CogniFy"
-    VERSION: str = "0.1.0"
+    VERSION: str = "1.0.0"
     DEBUG: bool = False
 
     # Database
@@ -49,18 +49,24 @@ class Settings(BaseSettings):
     EMBEDDING_DIMENSION: int = 1024
     EMBEDDING_CACHE_TTL: int = 3600  # 1 hour
 
+    # OCR Settings
+    OCR_MODEL: str = "scb10x/typhoon-ocr1.5-3b"  # Bilingual Thai+English vision model via Ollama
+
     # LLM Settings - General
-    LLM_PROVIDER: str = "ollama"  # ollama or openai
-    LLM_MODEL: str = "llama3.2:1b"
+    LLM_PROVIDER: str = "ollama"  # ollama or anthropic
+    LLM_MODEL: str = "scb10x/typhoon2.5-qwen3-4b"  # Bilingual Thai+English 4B based on Qwen3
     LLM_TEMPERATURE: float = 0.7
     LLM_MAX_TOKENS: int = 2048
 
     # LLM Settings - Ollama (Primary)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
 
-    # LLM Settings - OpenAI (Optional)
+    # LLM Settings - Anthropic (Optional)
+    ANTHROPIC_API_KEY: Optional[str] = None
+    ANTHROPIC_BASE_URL: str = "https://api.anthropic.com"
+
+    # OpenAI Embedding (Optional - for text-embedding-3-small fallback)
     OPENAI_API_KEY: Optional[str] = None
-    OPENAI_BASE_URL: str = "https://api.openai.com/v1"
 
     # RAG Settings - Chunking
     RAG_CHUNK_SIZE: int = 500

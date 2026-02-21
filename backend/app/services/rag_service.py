@@ -491,7 +491,12 @@ class RAGService:
             if r.chunk_id not in all_chunks:
                 all_chunks[r.chunk_id] = r
 
-        # Calculate RRF scores
+        # Build vector similarity map for display scores
+        vector_scores: Dict[UUID, float] = {
+            r.chunk_id: r.score for r in vector_results
+        }
+
+        # Calculate RRF scores for ranking
         k = settings.rrf_k
         results_with_rrf: List[SearchResult] = []
 
@@ -499,7 +504,7 @@ class RAGService:
             v_rank = vector_ranks.get(chunk_id)
             b_rank = bm25_ranks.get(chunk_id)
 
-            # RRF score calculation
+            # RRF score calculation (used for ranking only)
             rrf_score = 0.0
             if v_rank:
                 rrf_score += settings.vector_weight * (1.0 / (k + v_rank))
@@ -510,7 +515,8 @@ class RAGService:
             result.vector_rank = v_rank
             result.bm25_rank = b_rank
             result.rrf_score = rrf_score
-            result.score = rrf_score  # Use RRF as main score
+            # Display score = vector similarity (intuitive %), RRF used for ordering
+            result.score = vector_scores.get(chunk_id, result.score)
 
             results_with_rrf.append(result)
 

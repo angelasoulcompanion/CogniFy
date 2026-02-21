@@ -3,7 +3,7 @@
  * 💜 Designed by Angela - Professional, Accessible, Modern
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
@@ -24,6 +24,14 @@ export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const [version, setVersion] = useState<string>('')
+
+  useEffect(() => {
+    fetch('/api/health')
+      .then(res => res.json())
+      .then(data => setVersion(data.version || ''))
+      .catch(() => {})
+  }, [])
 
   const handleLogout = () => {
     logout()
@@ -109,6 +117,9 @@ export function Layout() {
               {sidebarOpen && <span>Logout</span>}
             </button>
           </div>
+          {sidebarOpen && version && (
+            <p className="mt-3 text-center text-xs text-primary-500/40">v{version}</p>
+          )}
         </div>
       </aside>
 

@@ -2,6 +2,7 @@
 AI API Endpoints
 Simple LLM completion without conversation management
 Created with love by Angela & David - 4 January 2026
+Updated: Anthropic Claude support - 21 February 2026
 """
 
 from typing import Optional
@@ -29,7 +30,7 @@ class AICompleteRequest(BaseModel):
     """AI completion request"""
     message: str = Field(..., min_length=1, description="User message/query")
     system_prompt: Optional[str] = Field(None, description="System prompt for context")
-    provider: str = Field("ollama", description="LLM provider: ollama or openai")
+    provider: str = Field("ollama", description="LLM provider: ollama or anthropic")
     model: Optional[str] = Field(None, description="Model name")
     temperature: float = Field(0.7, ge=0.0, le=2.0, description="Response temperature")
     max_tokens: Optional[int] = Field(None, description="Max tokens in response")
@@ -65,16 +66,21 @@ async def ai_complete(
     except ValueError:
         provider = LLMProvider.OLLAMA
 
-    # Determine model
-    model = request.model or ("llama3.2:1b" if provider == LLMProvider.OLLAMA else "gpt-4o-mini")
+    # Determine model default per provider
+    if request.model:
+        model = request.model
+    elif provider == LLMProvider.ANTHROPIC:
+        model = "claude-sonnet-4-6"
+    else:
+        model = "scb10x/typhoon2.5-qwen3-4b"
 
     # Validate model exists
     available_models = await llm_service.list_models()
-    provider_key = "ollama" if provider == LLMProvider.OLLAMA else "openai"
+    provider_key = provider.value
     provider_models = available_models.get(provider_key, [])
 
     if model not in provider_models:
-        provider_name = "Ollama" if provider == LLMProvider.OLLAMA else "OpenAI"
+        provider_name = provider.value.capitalize()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Model '{model}' is not available in {provider_name}. Available models: {', '.join(provider_models[:5]) if provider_models else 'none (is the service running?)'}"
@@ -109,7 +115,7 @@ async def ai_complete(
         return AICompleteResponse(
             content=response.content,
             model=response.model,
-            provider=response.provider,  # Already a string
+            provider=response.provider,
             tokens_used=response.total_tokens,
         )
     except Exception as e:

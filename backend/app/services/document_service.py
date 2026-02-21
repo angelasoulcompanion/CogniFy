@@ -26,6 +26,28 @@ class TextExtractor:
     """Extract text from various document formats"""
 
     @staticmethod
+    def _fix_thai_ocr_spaces(text: str) -> str:
+        """
+        Remove spurious spaces between Thai characters.
+        Tesseract Thai OCR commonly inserts spaces between every character:
+            "ก า ร บ ริ ห า ร" → "การบริหาร"
+            "ค ว า ม เ สี่ ย ง" → "ความเสี่ยง"
+        """
+        import re
+
+        if not text:
+            return text
+
+        # Repeatedly remove single spaces between Thai characters
+        # Thai Unicode range: \u0E00-\u0E7F (consonants, vowels, tone marks, digits)
+        prev = None
+        while prev != text:
+            prev = text
+            text = re.sub(r'([\u0E00-\u0E7F]) ([\u0E00-\u0E7F])', r'\1\2', text)
+
+        return text
+
+    @staticmethod
     def _fix_missing_spaces(text: str) -> str:
         """
         Fix missing spaces in extracted PDF text.
@@ -98,7 +120,7 @@ class TextExtractor:
     async def extract_pdf(file_path: str) -> Tuple[str, int, List[Tuple[int, str]]]:
         """
         Extract text from PDF using PyMuPDF.
-        Falls back to OCR (Tesseract) for scanned/image PDFs.
+        Hybrid approach: try text extraction per page, OCR only pages with no text.
 
         Returns:
             Tuple of (full_text, page_count, [(page_num, page_text), ...])
@@ -109,38 +131,62 @@ class TextExtractor:
 
             doc = fitz.open(file_path)
             total_pages = len(doc)
-            needs_ocr_count = 0
 
-            # First pass: check if PDF needs OCR
-            for page_num in range(min(5, total_pages)):  # Check first 5 pages
+            pages: List[Tuple[int, str]] = []
+            full_text_parts = []
+            ocr_pages = []  # Track pages that need OCR
+
+            # First pass: try text extraction for every page
+            for page_num in range(total_pages):
                 page = doc[page_num]
                 text = page.get_text("text").strip()
 
                 # Check if page has meaningful text
-                if not text or len(text) < 50:
-                    needs_ocr_count += 1
-                    continue
+                has_text = False
+                if text and len(text) >= 50:
+                    real_chars = len(re.findall(r'[a-zA-Z\u0E00-\u0E7F]', text))
+                    if real_chars / max(len(text), 1) >= 0.3:
+                        has_text = True
 
-                # Check if text looks like real content (has Thai/English letters)
-                real_chars = len(re.findall(r'[a-zA-Z\u0E00-\u0E7F]', text))
-                if real_chars / max(len(text), 1) < 0.3:  # Less than 30% real chars = garbage
-                    needs_ocr_count += 1
-
-            # If more than half of checked pages need OCR, use OCR for all
-            if needs_ocr_count > min(5, total_pages) / 2:
-                print(f"📷 Detected scanned PDF ({total_pages} pages), using OCR...")
-                pages, full_text_parts = await TextExtractor._ocr_pdf(doc)
-            else:
-                # Normal text extraction
-                pages: List[Tuple[int, str]] = []
-                full_text_parts = []
-                for page_num in range(total_pages):
-                    page = doc[page_num]
-                    text = page.get_text("text").strip()
-                    # Fix missing spaces from problematic PDFs
+                if has_text:
                     text = TextExtractor._fix_missing_spaces(text)
                     pages.append((page_num + 1, text))
                     full_text_parts.append(text)
+                else:
+                    # Mark for OCR later
+                    ocr_pages.append(page_num)
+                    pages.append((page_num + 1, ""))
+                    full_text_parts.append("")
+
+            # Second pass: OCR only pages that had no text (using Tesseract for speed)
+            if ocr_pages:
+                print(f"📷 OCR needed for {len(ocr_pages)}/{total_pages} pages (Tesseract batch)...")
+                try:
+                    import pytesseract
+                    from PIL import Image
+                    import io
+
+                    for page_num in ocr_pages:
+                        page = doc[page_num]
+                        print(f"   🔍 OCR page {page_num + 1}/{total_pages}...")
+
+                        mat = fitz.Matrix(2.0, 2.0)
+                        pix = page.get_pixmap(matrix=mat)
+                        img = Image.open(io.BytesIO(pix.tobytes("png")))
+
+                        text = pytesseract.image_to_string(
+                            img, lang="tha+eng",
+                            config="--psm 1 --oem 3",
+                        )
+                        text = TextExtractor._fix_thai_ocr_spaces(text.strip())
+                        text = TextExtractor._fix_missing_spaces(text)
+                        pages[page_num] = (page_num + 1, text)
+                        full_text_parts[page_num] = text
+
+                except ImportError:
+                    print("⚠️ Tesseract not available, skipping OCR pages")
+                except Exception as e:
+                    print(f"⚠️ Batch OCR error: {e}")
 
             doc.close()
 
@@ -157,94 +203,44 @@ class TextExtractor:
     @staticmethod
     async def _ocr_pdf(doc) -> Tuple[List[Tuple[int, str]], List[str]]:
         """
-        OCR all pages of a PDF using Tesseract.
+        OCR all pages of a PDF using Typhoon-OCR via Ollama.
         Supports Thai + English text.
         """
-        try:
-            import fitz  # PyMuPDF
-            import pytesseract
-            from PIL import Image
-            import io
-            import re
+        import fitz  # PyMuPDF
+        import os
 
-            pages: List[Tuple[int, str]] = []
-            full_text_parts = []
-            total_pages = len(doc)
+        from app.services.ocr_service import get_ocr_service
+        ocr_service = get_ocr_service()
 
-            for page_num in range(total_pages):
-                page = doc[page_num]
-                print(f"   🔍 OCR page {page_num + 1}/{total_pages}...")
+        pages: List[Tuple[int, str]] = []
+        full_text_parts = []
+        total_pages = len(doc)
 
-                # Render page to image (higher resolution for better OCR)
-                mat = fitz.Matrix(2.0, 2.0)  # 2x zoom for better quality
-                pix = page.get_pixmap(matrix=mat)
+        for page_num in range(total_pages):
+            page = doc[page_num]
+            print(f"   🔍 OCR page {page_num + 1}/{total_pages}...")
 
-                # Convert to PIL Image
-                img_data = pix.tobytes("png")
-                img = Image.open(io.BytesIO(img_data))
+            # Render page to image (2x zoom for better quality)
+            mat = fitz.Matrix(2.0, 2.0)
+            pix = page.get_pixmap(matrix=mat)
 
-                # OCR with Thai + English
-                text = pytesseract.image_to_string(
-                    img,
-                    lang='tha+eng',
-                    config='--psm 1 --oem 3'  # Auto page segmentation, best OCR engine
-                )
+            temp_path = f"/tmp/ocr_page_{page_num}.png"
+            pix.save(temp_path)
 
-                # Clean up OCR noise from mobile screenshots
-                text = TextExtractor._clean_ocr_text(text)
-
+            try:
+                result = await ocr_service.extract_text(temp_path)
+                text = TextExtractor._fix_missing_spaces(result.text)
                 pages.append((page_num + 1, text))
                 full_text_parts.append(text)
+            except Exception as e:
+                print(f"   ⚠️ OCR failed for page {page_num + 1}: {e}")
+                pages.append((page_num + 1, ""))
+                full_text_parts.append("")
+            finally:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
 
-            return pages, full_text_parts
-
-        except ImportError:
-            print("⚠️ pytesseract not installed. Install with: pip install pytesseract")
-            print("   Also install Tesseract: brew install tesseract tesseract-lang")
-            raise
-        except Exception as e:
-            print(f"❌ OCR error: {e}")
-            raise
-
-    @staticmethod
-    def _clean_ocr_text(text: str) -> str:
-        """Clean OCR noise from mobile screenshots"""
-        import re
-
-        # Remove common mobile status bar patterns
-        patterns_to_remove = [
-            r'\d{1,2}:\d{2}\s+\S{2,4}\s+\d{1,2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)',  # 13:30 ทีท 26 Dec (OCR errors in day name)
-            r'\d{2}:\d{2}\s+(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d+\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)',  # 08:46 Mon 22 Dec
-            r'all\s+\d*G?\s*[©®]\s*\d+%\s*[๐-๙๒]*',  # all 5G © 100% ๒
-            r'all\s+5G\s*[©®]?\s*\d*%?\s*[๐-๙]*',  # all 5G variations
-            r'al\s+[A-Z]{1,2}\s+\d+%\s*[ส๐-๙]*',  # al FS 98% ส๒, al SF 97% ส๒
-            r'^al\s+[A-Z]{1,3}\s+\d+%',  # al FS 98% at start of line
-            r'\d+%\s*[ส๐-๙๒]*\s*$',  # 98% ส๒ at end
-            r'^[\s\d:]+$',  # Lines with only numbers/time
-            r'[©®™]+',  # Copyright symbols
-        ]
-
-        lines = text.split('\n')
-        cleaned_lines = []
-
-        for line in lines:
-            cleaned_line = line.strip()
-
-            # Apply pattern removal
-            for pattern in patterns_to_remove:
-                cleaned_line = re.sub(pattern, '', cleaned_line, flags=re.IGNORECASE)
-
-            # Remove excessive whitespace
-            cleaned_line = re.sub(r'\s{3,}', '  ', cleaned_line)
-            cleaned_line = cleaned_line.strip()
-
-            # Only keep lines with meaningful content
-            if cleaned_line and len(cleaned_line) > 2:
-                # Check if line has actual letters (not just symbols)
-                if re.search(r'[a-zA-Z\u0E00-\u0E7F]', cleaned_line):
-                    cleaned_lines.append(cleaned_line)
-
-        return '\n'.join(cleaned_lines)
+        return pages, full_text_parts
 
     @staticmethod
     async def extract_docx(file_path: str) -> Tuple[str, int, List[Tuple[int, str]]]:
@@ -367,7 +363,7 @@ class TextExtractor:
         Extract text from image using OCR.
 
         Supports: PNG, JPG, JPEG
-        Uses multiple OCR engines with fallback (Tesseract → PaddleOCR → EasyOCR)
+        Uses Typhoon-OCR 1.5-3B via Ollama (fallback: Tesseract)
 
         Returns:
             Tuple of (full_text, page_count, [(page_num, page_text), ...])
@@ -376,7 +372,7 @@ class TextExtractor:
             from app.services.ocr_service import get_ocr_service
 
             ocr_service = get_ocr_service()
-            result = await ocr_service.extract_text(file_path, preprocess=True)
+            result = await ocr_service.extract_text(file_path)
 
             full_text = result.text
             confidence = result.confidence
@@ -390,8 +386,7 @@ class TextExtractor:
         except ImportError as e:
             logger.warning(f"⚠️ OCR dependencies not installed: {e}")
             raise ValueError(
-                "OCR is not available. Install with: pip install pytesseract pillow opencv-python\n"
-                "Also install Tesseract: brew install tesseract tesseract-lang"
+                "OCR is not available. Ensure Typhoon-OCR model is pulled: ollama pull scb10x/typhoon-ocr1.5-3b"
             )
         except Exception as e:
             logger.error(f"❌ Image OCR error: {e}")

@@ -24,12 +24,10 @@ import {
   Database,
   ChevronRight,
   Calendar,
-  Tag,
   AlertCircle,
   Bell,
   RefreshCw,
   PartyPopper,
-  Megaphone,
   Info,
   X,
 } from 'lucide-react'
@@ -311,7 +309,7 @@ export default function HomePage() {
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null)
 
   // Fetch data
-  const { data: pinnedData, isLoading: pinnedLoading } = usePinnedAnnouncements(3)
+  const { data: pinnedData } = usePinnedAnnouncements(3)
   const { data: recentData, isLoading: recentLoading } = useAnnouncements({ limit: 6 })
 
   // Get recent announcements (exclude pinned ones)

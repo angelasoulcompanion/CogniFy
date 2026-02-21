@@ -317,6 +317,29 @@ export interface SearchConfig {
   includeContent: boolean;
 }
 
+// =============================================================================
+// STRUCTURED RESPONSE TYPES (for AI answer rendering)
+// =============================================================================
+
+export interface StructuredContentItem {
+  type: 'text' | 'fact' | 'list_item';
+  text?: string;
+  label?: string;
+  value?: string;
+}
+
+export interface StructuredSection {
+  heading: string;
+  items: StructuredContentItem[];
+}
+
+export interface StructuredResponse {
+  title?: string;
+  sections: StructuredSection[];
+  sources_used?: number[];
+  raw_text?: string;
+}
+
 export interface SearchState {
   // Query
   query: string;

@@ -695,7 +695,7 @@ class Conversation:
     rag_enabled: bool = True
     rag_settings: Optional[RAGSettings] = None
     model_provider: str = "ollama"
-    model_name: str = "llama3.2:1b"
+    model_name: str = "scb10x/typhoon2.5-qwen3-4b"
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime = field(default_factory=datetime.utcnow)
 
@@ -1099,7 +1099,7 @@ class ChatService:
                     messages=chat_messages,
                     rag_enabled=db_conv.get("rag_enabled", True),
                     model_provider=db_conv.get("model_provider", "ollama"),
-                    model_name=db_conv.get("model_name", "llama3.2:1b"),
+                    model_name=db_conv.get("model_name", "scb10x/typhoon2.5-qwen3-4b"),
                     created_at=datetime.fromisoformat(db_conv["created_at"]) if isinstance(db_conv["created_at"], str) else db_conv["created_at"],
                     updated_at=datetime.fromisoformat(db_conv["updated_at"]) if isinstance(db_conv["updated_at"], str) else db_conv["updated_at"],
                 )
@@ -1110,7 +1110,7 @@ class ChatService:
         db_conv = await self.conversation_repo.create_conversation(
             user_id=user_id,
             model_provider=provider or "ollama",
-            model_name=model or "llama3.2:1b",
+            model_name=model or "scb10x/typhoon2.5-qwen3-4b",
         )
 
         conv_id = UUID(db_conv["conversation_id"])
@@ -1118,7 +1118,7 @@ class ChatService:
             conversation_id=conv_id,
             user_id=user_id,
             model_provider=provider or "ollama",
-            model_name=model or "llama3.2:1b",
+            model_name=model or "scb10x/typhoon2.5-qwen3-4b",
         )
         self._conversations[conv_id] = conversation
         return conversation

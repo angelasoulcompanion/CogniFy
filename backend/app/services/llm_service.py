@@ -3,7 +3,7 @@ CogniFy LLM Service
 
 Provides unified interface for:
 - Ollama (local LLMs)
-- OpenAI API (cloud)
+- Anthropic API (Claude)
 
 Features:
 - Streaming responses (async generators)
@@ -12,6 +12,7 @@ Features:
 - Response caching (optional)
 
 Created with love by Angela & David - 1 January 2026
+Updated: Anthropic Claude support - 21 February 2026
 """
 
 import json
@@ -29,7 +30,7 @@ from app.core.config import settings
 class LLMProvider(str, Enum):
     """Available LLM providers"""
     OLLAMA = "ollama"
-    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
 
 
 class MessageRole(str, Enum):
@@ -53,16 +54,16 @@ class Message:
 class LLMConfig:
     """LLM configuration"""
     provider: LLMProvider = LLMProvider.OLLAMA
-    model: str = "llama3.2:1b"
+    model: str = "scb10x/typhoon2.5-qwen3-4b"
     temperature: float = 0.7
     max_tokens: int = 2048
     top_p: float = 0.9
     stream: bool = True
     # Ollama specific
     ollama_base_url: str = "http://localhost:11434"
-    # OpenAI specific
-    openai_api_key: Optional[str] = None
-    openai_base_url: str = "https://api.openai.com/v1"
+    # Anthropic specific
+    anthropic_api_key: Optional[str] = None
+    anthropic_base_url: str = "https://api.anthropic.com"
 
     @classmethod
     def from_settings(cls, provider: Optional[str] = None) -> "LLMConfig":
@@ -73,7 +74,8 @@ class LLMConfig:
             temperature=settings.LLM_TEMPERATURE,
             max_tokens=settings.LLM_MAX_TOKENS,
             ollama_base_url=settings.OLLAMA_BASE_URL,
-            openai_api_key=settings.OPENAI_API_KEY,
+            anthropic_api_key=settings.ANTHROPIC_API_KEY,
+            anthropic_base_url=settings.ANTHROPIC_BASE_URL,
         )
 
 
@@ -243,52 +245,82 @@ class OllamaProvider(BaseLLMProvider):
             }
 
     async def list_models(self) -> List[str]:
-        """List available Ollama models"""
+        """List available Ollama models (with and without :latest tag)"""
         try:
             response = await self.client.get(f"{self.base_url}/api/tags")
             response.raise_for_status()
             data = response.json()
-            return [m["name"] for m in data.get("models", [])]
+            names = set()
+            for m in data.get("models", []):
+                name = m["name"]
+                names.add(name)
+                # Also add short name without :latest tag
+                if ":" in name:
+                    names.add(name.rsplit(":", 1)[0])
+            return sorted(names)
         except Exception:
             return []
 
 
 # =============================================================================
-# OPENAI PROVIDER
+# ANTHROPIC PROVIDER
 # =============================================================================
 
-class OpenAIProvider(BaseLLMProvider):
-    """OpenAI API provider"""
+class AnthropicProvider(BaseLLMProvider):
+    """Anthropic API provider for Claude models"""
 
-    def __init__(self, api_key: str, base_url: str = "https://api.openai.com/v1"):
+    MODELS = [
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5-20251001",
+    ]
+
+    def __init__(self, api_key: str, base_url: str = "https://api.anthropic.com"):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.client = httpx.AsyncClient(
             timeout=120.0,
             headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
             }
         )
+
+    def _split_system(self, messages: List[Message]) -> tuple[Optional[str], List[Dict[str, str]]]:
+        """
+        Anthropic requires system prompt as a separate top-level field.
+        Split system message from conversation messages.
+        """
+        system_prompt = None
+        api_messages = []
+        for m in messages:
+            if m.role == MessageRole.SYSTEM:
+                system_prompt = m.content
+            else:
+                api_messages.append(m.to_dict())
+        return system_prompt, api_messages
 
     async def generate(
         self,
         messages: List[Message],
         config: LLMConfig
     ) -> LLMResponse:
-        """Generate complete response from OpenAI"""
+        """Generate complete response from Anthropic"""
         import time
         start_time = time.time()
 
-        url = f"{self.base_url}/chat/completions"
-        payload = {
+        system_prompt, api_messages = self._split_system(messages)
+
+        url = f"{self.base_url}/v1/messages"
+        payload: Dict[str, Any] = {
             "model": config.model,
-            "messages": [m.to_dict() for m in messages],
-            "temperature": config.temperature,
+            "messages": api_messages,
             "max_tokens": config.max_tokens,
+            "temperature": config.temperature,
             "top_p": config.top_p,
-            "stream": False,
         }
+        if system_prompt:
+            payload["system"] = system_prompt
 
         try:
             response = await self.client.post(url, json=payload)
@@ -296,79 +328,105 @@ class OpenAIProvider(BaseLLMProvider):
             data = response.json()
 
             response_time = int((time.time() - start_time) * 1000)
-            choice = data.get("choices", [{}])[0]
+
+            # Extract text from content blocks
+            content = ""
+            for block in data.get("content", []):
+                if block.get("type") == "text":
+                    content += block.get("text", "")
+
             usage = data.get("usage", {})
 
             return LLMResponse(
-                content=choice.get("message", {}).get("content", ""),
+                content=content,
                 model=data.get("model", config.model),
-                provider="openai",
-                prompt_tokens=usage.get("prompt_tokens", 0),
-                completion_tokens=usage.get("completion_tokens", 0),
-                total_tokens=usage.get("total_tokens", 0),
-                finish_reason=choice.get("finish_reason", "stop"),
+                provider="anthropic",
+                prompt_tokens=usage.get("input_tokens", 0),
+                completion_tokens=usage.get("output_tokens", 0),
+                total_tokens=usage.get("input_tokens", 0) + usage.get("output_tokens", 0),
+                finish_reason=data.get("stop_reason", "end_turn"),
                 response_time_ms=response_time,
             )
         except Exception as e:
-            raise LLMError(f"OpenAI generate failed: {e}")
+            raise LLMError(f"Anthropic generate failed: {e}")
 
     async def stream(
         self,
         messages: List[Message],
         config: LLMConfig
     ) -> AsyncGenerator[StreamChunk, None]:
-        """Stream response from OpenAI"""
-        url = f"{self.base_url}/chat/completions"
-        payload = {
+        """Stream response from Anthropic"""
+        system_prompt, api_messages = self._split_system(messages)
+
+        url = f"{self.base_url}/v1/messages"
+        payload: Dict[str, Any] = {
             "model": config.model,
-            "messages": [m.to_dict() for m in messages],
-            "temperature": config.temperature,
+            "messages": api_messages,
             "max_tokens": config.max_tokens,
+            "temperature": config.temperature,
             "top_p": config.top_p,
             "stream": True,
         }
+        if system_prompt:
+            payload["system"] = system_prompt
 
         try:
             async with self.client.stream("POST", url, json=payload) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():
-                    if line.startswith("data: "):
-                        data_str = line[6:]
-                        if data_str.strip() == "[DONE]":
-                            yield StreamChunk(content="", is_done=True, finish_reason="stop")
-                            break
+                    if not line.startswith("data: "):
+                        continue
 
-                        try:
-                            data = json.loads(data_str)
-                            delta = data.get("choices", [{}])[0].get("delta", {})
-                            content = delta.get("content", "")
-                            finish_reason = data.get("choices", [{}])[0].get("finish_reason")
+                    data_str = line[6:]
+                    try:
+                        data = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
 
-                            if content:
-                                yield StreamChunk(
-                                    content=content,
-                                    is_done=False,
-                                    finish_reason=finish_reason,
-                                )
-                        except json.JSONDecodeError:
-                            continue
+                    event_type = data.get("type", "")
+
+                    if event_type == "content_block_delta":
+                        delta = data.get("delta", {})
+                        if delta.get("type") == "text_delta":
+                            yield StreamChunk(
+                                content=delta.get("text", ""),
+                                is_done=False,
+                            )
+
+                    elif event_type == "message_stop":
+                        yield StreamChunk(
+                            content="",
+                            is_done=True,
+                            finish_reason="end_turn",
+                        )
+                        break
+
         except Exception as e:
-            raise LLMError(f"OpenAI stream failed: {e}")
+            raise LLMError(f"Anthropic stream failed: {e}")
 
     async def health_check(self) -> Dict[str, Any]:
-        """Check OpenAI health"""
+        """Check Anthropic health"""
         try:
-            response = await self.client.get(f"{self.base_url}/models")
+            # Simple test: send a tiny request
+            response = await self.client.post(
+                f"{self.base_url}/v1/messages",
+                json={
+                    "model": "claude-haiku-4-5-20251001",
+                    "max_tokens": 1,
+                    "messages": [{"role": "user", "content": "hi"}],
+                },
+            )
             response.raise_for_status()
             return {
                 "status": "healthy",
-                "provider": "openai",
-                "api_key_set": bool(self.api_key),
+                "provider": "anthropic",
+                "api_key_set": True,
+                "models_available": self.MODELS,
             }
         except Exception as e:
             return {
                 "status": "unhealthy",
-                "provider": "openai",
+                "provider": "anthropic",
                 "error": str(e),
             }
 
@@ -387,7 +445,7 @@ class LLMService:
     Unified LLM Service
 
     Features:
-    - Multiple provider support (Ollama, OpenAI)
+    - Multiple provider support (Ollama, Anthropic)
     - Automatic fallback
     - Streaming responses
     """
@@ -404,11 +462,11 @@ class LLMService:
             base_url=self.config.ollama_base_url
         )
 
-        # Initialize OpenAI if API key is available
-        if self.config.openai_api_key:
-            self._providers[LLMProvider.OPENAI] = OpenAIProvider(
-                api_key=self.config.openai_api_key,
-                base_url=self.config.openai_base_url,
+        # Initialize Anthropic if API key is available
+        if self.config.anthropic_api_key:
+            self._providers[LLMProvider.ANTHROPIC] = AnthropicProvider(
+                api_key=self.config.anthropic_api_key,
+                base_url=self.config.anthropic_base_url,
             )
 
     def _get_provider(self, provider: Optional[LLMProvider] = None) -> BaseLLMProvider:
@@ -436,8 +494,7 @@ class LLMService:
             llm_provider = self._get_provider(primary_provider)
             return await llm_provider.generate(messages, config)
         except LLMError as e:
-            # Don't fallback automatically - let frontend know which provider failed
-            provider_name = "Ollama" if primary_provider == LLMProvider.OLLAMA else "OpenAI"
+            provider_name = primary_provider.value.capitalize()
             raise LLMError(f"{provider_name} is not available. Please check if {provider_name} is running or try selecting a different model.")
 
     async def stream(
@@ -535,13 +592,8 @@ class LLMService:
             if isinstance(ollama, OllamaProvider):
                 models["ollama"] = await ollama.list_models()
 
-        if LLMProvider.OPENAI in self._providers:
-            models["openai"] = [
-                "gpt-4o",
-                "gpt-4o-mini",
-                "gpt-4-turbo",
-                "gpt-3.5-turbo",
-            ]
+        if LLMProvider.ANTHROPIC in self._providers:
+            models["anthropic"] = AnthropicProvider.MODELS
 
         return models
 

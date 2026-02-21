@@ -33,14 +33,11 @@ import { useSearchStore, useSearch, useSearchStats, useAskAI } from '@/hooks/use
 // Model options for Ask AI
 const MODEL_OPTIONS = {
   local: [
-    { value: 'qwen2.5:7b', label: 'Qwen 2.5 (7B)', provider: 'ollama' },
-    { value: 'qwen2.5:14b', label: 'Qwen 2.5 (14B)', provider: 'ollama' },
-    { value: 'supachai/llama-3-typhoon-v1.5:latest', label: 'Typhoon 1.5 (8B)', provider: 'ollama' },
-    { value: 'llama3.1:8b', label: 'Llama 3.1 (8B)', provider: 'ollama' },
+    { value: 'scb10x/typhoon2.5-qwen3-4b', label: 'Typhoon 2.5 (4B)', provider: 'ollama' },
   ],
   api: [
-    { value: 'gpt-4o-mini', label: 'GPT-4o Mini', provider: 'openai' },
-    { value: 'gpt-4o', label: 'GPT-4o', provider: 'openai' },
+    { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', provider: 'anthropic' },
+    { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', provider: 'anthropic' },
   ],
 }
 

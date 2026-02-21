@@ -26,7 +26,7 @@ class ConversationRepository:
         user_id: Optional[UUID] = None,
         title: Optional[str] = None,
         model_provider: str = "ollama",
-        model_name: str = "llama3.2:1b",
+        model_name: str = "scb10x/typhoon2.5-qwen3-4b",
         rag_enabled: bool = True,
         rag_settings: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
