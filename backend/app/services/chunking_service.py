@@ -261,15 +261,11 @@ class ChunkingService:
 
 
 # ============================================================================
-# SINGLETON INSTANCE
+# SERVICE ACCESS
 # ============================================================================
-
-_chunking_service: Optional[ChunkingService] = None
 
 
 def get_chunking_service() -> ChunkingService:
-    """Get global ChunkingService instance"""
-    global _chunking_service
-    if _chunking_service is None:
-        _chunking_service = ChunkingService()
-    return _chunking_service
+    """Get ChunkingService via the global ServiceContainer"""
+    from app.core.container import get_container
+    return get_container().chunking

@@ -11,6 +11,7 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 from uuid import UUID
 
+from app.core.logging import logger
 from app.infrastructure.database import Database
 
 
@@ -94,7 +95,7 @@ class EmbeddingRepository:
             await pool.execute(sql, text_hash, embedding_str, model_name, expires_at)
             return True
         except Exception as e:
-            print(f"Failed to cache embedding: {e}")
+            logger.warning("Failed to cache embedding: {}", e)
             return False
 
     async def delete_expired_cache(self) -> int:
@@ -303,7 +304,7 @@ class EmbeddingRepository:
             await pool.execute(sql, str(chunk_id), embedding_str, model_name)
             return True
         except Exception as e:
-            print(f"Failed to update chunk embedding: {e}")
+            logger.warning("Failed to update chunk embedding: {}", e)
             return False
 
     async def get_chunks_without_embeddings(

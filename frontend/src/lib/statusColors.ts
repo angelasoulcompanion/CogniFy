@@ -173,3 +173,23 @@ export function getStatusColor(status: string): string {
     statusColorMap.default
   )
 }
+
+/**
+ * Get badge class for similarity/relevance score
+ * Used in search results and AI answer sources
+ */
+export function getScoreColor(score: number, includeBorder = true): string {
+  if (score >= 0.7) {
+    return includeBorder
+      ? 'text-green-400 bg-green-500/20 border-green-500/30'
+      : 'bg-green-500/20 text-green-400'
+  }
+  if (score >= 0.5) {
+    return includeBorder
+      ? 'text-yellow-400 bg-yellow-500/20 border-yellow-500/30'
+      : 'bg-yellow-500/20 text-yellow-400'
+  }
+  return includeBorder
+    ? 'text-secondary-400 bg-secondary-700 border-secondary-600'
+    : 'bg-secondary-700 text-secondary-400'
+}

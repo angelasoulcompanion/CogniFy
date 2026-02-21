@@ -19,6 +19,8 @@ from datetime import datetime
 from enum import Enum
 from pydantic import BaseModel, Field
 
+from app.core.logging import logger
+
 from app.services.llm_service import (
     get_llm_service,
     LLMService,
@@ -447,7 +449,7 @@ Be helpful, accurate, and concise."""
 
         # Debug log
         if text != original and len(original) > 20:
-            print(f"🔧 Thai-English spacing fixed: {len(original)} -> {len(text)} chars")
+            logger.debug("Thai-English spacing fixed: {} -> {} chars", len(original), len(text))
 
         return text
 
@@ -511,7 +513,7 @@ Be helpful, accurate, and concise."""
 
                 # Replace in text
                 text = text.replace(original_match, code_block, 1)
-                print(f"🔧 Fixed inline code block: {len(original_match)} chars → code fence")
+                logger.debug("Fixed inline code block: {} chars -> code fence", len(original_match))
 
         # Pattern 3: Detect backtick code that's missing language
         # e.g., "`class SimpleAI:`" should be "```python\nclass SimpleAI:\n```"
@@ -1196,7 +1198,7 @@ class ChatService:
         # If custom system prompt provided, use it directly
         if custom_system_prompt:
             system_prompt = custom_system_prompt
-            print(f"📝 Using custom system prompt (length: {len(system_prompt)})")
+            logger.debug("Using custom system prompt (length: {})", len(system_prompt))
         else:
             # Map frontend expert name to database expert_role
             db_expert_role = PromptTemplates.EXPERT_ROLE_MAP.get(expert, "general")
@@ -1219,7 +1221,7 @@ class ChatService:
                         })
                         # Increment usage count
                         await prompt_service.increment_usage(db_prompt.template_id)
-                        print(f"📝 Using DB prompt: {db_prompt.name} (expert: {db_expert_role})")
+                        logger.debug("Using DB prompt: {} (expert: {})", db_prompt.name, db_expert_role)
                 else:
                     # Try system prompt from database (no context)
                     db_prompt = await prompt_service.get_default_prompt(
@@ -1229,9 +1231,9 @@ class ChatService:
                     if db_prompt:
                         system_prompt = db_prompt.render({})
                         await prompt_service.increment_usage(db_prompt.template_id)
-                        print(f"📝 Using DB prompt: {db_prompt.name}")
+                        logger.debug("Using DB prompt: {}", db_prompt.name)
             except Exception as e:
-                print(f"⚠️ Failed to get DB prompt, using hardcoded: {e}")
+                logger.warning("Failed to get DB prompt, using hardcoded: {}", e)
 
             # Fallback to hardcoded prompts if database prompt not found
             if not system_prompt:
@@ -1239,7 +1241,7 @@ class ChatService:
                     system_prompt = PromptTemplates.get_rag_prompt(context, question=question, expert=expert)
                 else:
                     system_prompt = PromptTemplates.get_no_context_prompt(question=question, expert=expert)
-                print(f"📝 Using hardcoded prompt (expert: {expert})")
+                logger.debug("Using hardcoded prompt (expert: {})", expert)
 
         messages.append(Message(role=MessageRole.SYSTEM, content=system_prompt))
 
@@ -1288,15 +1290,10 @@ class ChatService:
 
 
 # =============================================================================
-# SINGLETON ACCESS
+# SINGLETON ACCESS (delegates to ServiceContainer)
 # =============================================================================
 
-_chat_service: Optional[ChatService] = None
-
-
 def get_chat_service() -> ChatService:
-    """Get or create ChatService singleton"""
-    global _chat_service
-    if _chat_service is None:
-        _chat_service = ChatService()
-    return _chat_service
+    """Get ChatService via the global ServiceContainer"""
+    from app.core.container import get_container
+    return get_container().chat

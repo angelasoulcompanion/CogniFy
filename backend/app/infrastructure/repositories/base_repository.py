@@ -4,6 +4,7 @@ Generic CRUD operations for all repositories
 Pattern from AngelaAI
 """
 
+import re
 from abc import ABC, abstractmethod
 from typing import TypeVar, Generic, Optional, List, Any, Dict
 from uuid import UUID
@@ -11,8 +12,17 @@ import asyncpg
 
 from app.infrastructure.database import Database
 
-
 T = TypeVar("T")
+
+# Only allow safe SQL identifiers (letters, digits, underscore)
+_SAFE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+def _validate_identifier(name: str) -> str:
+    """Validate that a string is a safe SQL identifier (prevents SQL injection)"""
+    if not _SAFE_IDENTIFIER_RE.match(name):
+        raise ValueError(f"Unsafe SQL identifier: {name!r}")
+    return name
 
 
 class BaseRepository(ABC, Generic[T]):
@@ -22,8 +32,8 @@ class BaseRepository(ABC, Generic[T]):
     """
 
     def __init__(self, table_name: str, primary_key_column: str = "id"):
-        self.table_name = table_name
-        self.primary_key_column = primary_key_column
+        self.table_name = _validate_identifier(table_name)
+        self.primary_key_column = _validate_identifier(primary_key_column)
 
     @abstractmethod
     def _row_to_entity(self, row: asyncpg.Record) -> T:
@@ -54,6 +64,7 @@ class BaseRepository(ABC, Generic[T]):
         order_desc: bool = True
     ) -> List[T]:
         """Get all entities with pagination"""
+        _validate_identifier(order_by)
         order_direction = "DESC" if order_desc else "ASC"
         query = f"""
             SELECT * FROM {self.table_name}

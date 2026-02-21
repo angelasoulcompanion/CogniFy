@@ -7,15 +7,14 @@ Upgraded to Typhoon-OCR - 21 February 2026
 
 import os
 import base64
-import logging
+import tempfile
 from typing import Optional, List, Tuple, Dict, Any
 from dataclasses import dataclass
 
 import httpx
 
 from app.core.config import settings
-
-logger = logging.getLogger(__name__)
+from app.core.logging import logger
 
 OCR_PROMPT = (
     "Extract ALL text from this document image. "
@@ -167,15 +166,16 @@ class OCRService:
 
         for page_num in range(len(doc)):
             page = doc[page_num]
-            print(f"   OCR page {page_num + 1}/{len(doc)}...")
+            logger.debug("OCR page {}/{}", page_num + 1, len(doc))
 
             # Render page to image
             mat = fitz.Matrix(dpi / 72, dpi / 72)
             pix = page.get_pixmap(matrix=mat)
 
             # Save to temp file
-            temp_path = f"/tmp/ocr_page_{page_num}.png"
-            pix.save(temp_path)
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                temp_path = tmp.name
+                pix.save(temp_path)
 
             try:
                 result = await self.extract_text(temp_path)
@@ -200,15 +200,10 @@ class OCRService:
 
 
 # =============================================================================
-# SINGLETON INSTANCE
+# SINGLETON ACCESS (delegates to ServiceContainer)
 # =============================================================================
 
-_ocr_service: Optional[OCRService] = None
-
-
 def get_ocr_service() -> OCRService:
-    """Get global OCR service instance"""
-    global _ocr_service
-    if _ocr_service is None:
-        _ocr_service = OCRService()
-    return _ocr_service
+    """Get OCRService via the global ServiceContainer"""
+    from app.core.container import get_container
+    return get_container().ocr

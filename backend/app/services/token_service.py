@@ -285,13 +285,7 @@ class TokenService:
         return expired, revoked
 
 
-# Singleton instance
-_token_service: Optional[TokenService] = None
-
-
 def get_token_service() -> TokenService:
-    """Get token service singleton"""
-    global _token_service
-    if _token_service is None:
-        _token_service = TokenService()
-    return _token_service
+    """Get TokenService via the global ServiceContainer"""
+    from app.core.container import get_container
+    return get_container().token

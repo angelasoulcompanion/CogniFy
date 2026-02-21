@@ -113,6 +113,7 @@ import {
   SearchResults,
   AIAnswerCard,
 } from '@/components/search'
+import { Popover } from '@/components/ui/Popover'
 
 export function SearchPage() {
   const [configOpen, setConfigOpen] = useState(true)
@@ -266,32 +267,28 @@ export function SearchPage() {
               </div>
 
               {/* Recent Queries Dropdown */}
-              {showRecentQueries && recentQueries.length > 0 && (
-                <>
-                  <div
-                    className="fixed inset-0 z-10"
-                    onClick={() => setShowRecentQueries(false)}
-                  />
-                  <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-xl border border-secondary-700 bg-secondary-800 p-2 shadow-xl">
-                    <div className="mb-2 px-2 py-1 text-xs font-medium text-secondary-400 uppercase tracking-wide flex items-center gap-2">
-                      <Clock className="h-3 w-3" />
-                      Recent Searches
-                    </div>
-                    <div className="space-y-1">
-                      {recentQueries.map((q, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => handleRecentQueryClick(q)}
-                          className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-secondary-300 hover:bg-secondary-700 transition-colors text-left"
-                        >
-                          <Search className="h-4 w-4 text-secondary-500" />
-                          {q}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
+              <Popover
+                open={showRecentQueries && recentQueries.length > 0}
+                onClose={() => setShowRecentQueries(false)}
+                className="left-0 right-0"
+              >
+                <div className="mb-2 px-2 py-1 text-xs font-medium text-secondary-400 uppercase tracking-wide flex items-center gap-2">
+                  <Clock className="h-3 w-3" />
+                  Recent Searches
+                </div>
+                <div className="space-y-1">
+                  {recentQueries.map((q, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleRecentQueryClick(q)}
+                      className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-secondary-300 hover:bg-secondary-700 transition-colors text-left"
+                    >
+                      <Search className="h-4 w-4 text-secondary-500" />
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </Popover>
             </form>
 
             {/* Results Info + Ask AI Controls */}
@@ -327,54 +324,50 @@ export function SearchPage() {
                         <GraduationCap className="h-3.5 w-3.5 text-secondary-500" />
                       </button>
 
-                      {showExpertSelector && (
-                        <>
-                          <div
-                            className="fixed inset-0 z-10"
-                            onClick={() => setShowExpertSelector(false)}
-                          />
-                          <div className="absolute left-0 top-full z-20 mt-2 w-72 rounded-xl border border-secondary-700 bg-secondary-800 p-2 shadow-xl">
-                            <div className="mb-2 px-2 py-1 text-xs font-medium text-secondary-400 uppercase tracking-wide">
-                              Select Expert Role
-                            </div>
-                            <div className="space-y-1 max-h-64 overflow-y-auto">
-                              {EXPERT_OPTIONS.map((expert) => {
-                                const IconComponent = expert.icon
-                                return (
-                                  <button
-                                    key={expert.value}
-                                    onClick={() => {
-                                      setSelectedExpert(expert)
-                                      setShowExpertSelector(false)
-                                    }}
-                                    className={cn(
-                                      'w-full flex items-start gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
-                                      selectedExpert.value === expert.value
-                                        ? 'bg-primary-500/20'
-                                        : 'hover:bg-secondary-700'
-                                    )}
-                                  >
-                                    <IconComponent className={cn('h-5 w-5 mt-0.5 flex-shrink-0', expert.color)} />
-                                    <div className="text-left">
-                                      <div className={cn(
-                                        'font-medium',
-                                        selectedExpert.value === expert.value
-                                          ? 'text-primary-300'
-                                          : 'text-secondary-200'
-                                      )}>
-                                        {expert.label}
-                                      </div>
-                                      <div className="text-xs text-secondary-500">
-                                        {expert.description}
-                                      </div>
-                                    </div>
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        </>
-                      )}
+                      <Popover
+                        open={showExpertSelector}
+                        onClose={() => setShowExpertSelector(false)}
+                        className="w-72"
+                      >
+                        <div className="mb-2 px-2 py-1 text-xs font-medium text-secondary-400 uppercase tracking-wide">
+                          Select Expert Role
+                        </div>
+                        <div className="space-y-1 max-h-64 overflow-y-auto">
+                          {EXPERT_OPTIONS.map((expert) => {
+                            const IconComponent = expert.icon
+                            return (
+                              <button
+                                key={expert.value}
+                                onClick={() => {
+                                  setSelectedExpert(expert)
+                                  setShowExpertSelector(false)
+                                }}
+                                className={cn(
+                                  'w-full flex items-start gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                                  selectedExpert.value === expert.value
+                                    ? 'bg-primary-500/20'
+                                    : 'hover:bg-secondary-700'
+                                )}
+                              >
+                                <IconComponent className={cn('h-5 w-5 mt-0.5 flex-shrink-0', expert.color)} />
+                                <div className="text-left">
+                                  <div className={cn(
+                                    'font-medium',
+                                    selectedExpert.value === expert.value
+                                      ? 'text-primary-300'
+                                      : 'text-secondary-200'
+                                  )}>
+                                    {expert.label}
+                                  </div>
+                                  <div className="text-xs text-secondary-500">
+                                    {expert.description}
+                                  </div>
+                                </div>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </Popover>
                     </div>
 
                     {/* Model Selector */}
@@ -392,71 +385,67 @@ export function SearchPage() {
                         <Settings2 className="h-3.5 w-3.5 text-secondary-500" />
                       </button>
 
-                      {showModelSelector && (
-                        <>
-                          <div
-                            className="fixed inset-0 z-10"
-                            onClick={() => setShowModelSelector(false)}
-                          />
-                          <div className="absolute left-0 top-full z-20 mt-2 w-64 rounded-xl border border-secondary-700 bg-secondary-800 p-2 shadow-xl">
-                            {/* Type Toggle */}
-                            <div className="flex gap-1 rounded-lg bg-secondary-900 p-1 mb-2">
-                              <button
-                                onClick={() => {
-                                  setModelType('local')
-                                  setSelectedModel(MODEL_OPTIONS.local[0])
-                                }}
-                                className={cn(
-                                  'flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-                                  modelType === 'local'
-                                    ? 'bg-green-500/20 text-green-400'
-                                    : 'text-secondary-400 hover:text-white'
-                                )}
-                              >
-                                <Cpu className="h-4 w-4" />
-                                Local
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setModelType('api')
-                                  setSelectedModel(MODEL_OPTIONS.api[0])
-                                }}
-                                className={cn(
-                                  'flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-                                  modelType === 'api'
-                                    ? 'bg-blue-500/20 text-blue-400'
-                                    : 'text-secondary-400 hover:text-white'
-                                )}
-                              >
-                                <Cloud className="h-4 w-4" />
-                                API
-                              </button>
-                            </div>
+                      <Popover
+                        open={showModelSelector}
+                        onClose={() => setShowModelSelector(false)}
+                        className="w-64"
+                      >
+                        {/* Type Toggle */}
+                        <div className="flex gap-1 rounded-lg bg-secondary-900 p-1 mb-2">
+                          <button
+                            onClick={() => {
+                              setModelType('local')
+                              setSelectedModel(MODEL_OPTIONS.local[0])
+                            }}
+                            className={cn(
+                              'flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                              modelType === 'local'
+                                ? 'bg-green-500/20 text-green-400'
+                                : 'text-secondary-400 hover:text-white'
+                            )}
+                          >
+                            <Cpu className="h-4 w-4" />
+                            Local
+                          </button>
+                          <button
+                            onClick={() => {
+                              setModelType('api')
+                              setSelectedModel(MODEL_OPTIONS.api[0])
+                            }}
+                            className={cn(
+                              'flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                              modelType === 'api'
+                                ? 'bg-blue-500/20 text-blue-400'
+                                : 'text-secondary-400 hover:text-white'
+                            )}
+                          >
+                            <Cloud className="h-4 w-4" />
+                            API
+                          </button>
+                        </div>
 
-                            {/* Model Options */}
-                            <div className="space-y-1">
-                              {MODEL_OPTIONS[modelType].map((model) => (
-                                <button
-                                  key={model.value}
-                                  onClick={() => {
-                                    setSelectedModel(model)
-                                    setShowModelSelector(false)
-                                  }}
-                                  className={cn(
-                                    'w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors',
-                                    selectedModel.value === model.value
-                                      ? 'bg-primary-500/20 text-primary-300'
-                                      : 'text-secondary-300 hover:bg-secondary-700'
-                                  )}
-                                >
-                                  <span>{model.label}</span>
-                                  <span className="text-xs text-secondary-500">{model.provider}</span>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        </>
-                      )}
+                        {/* Model Options */}
+                        <div className="space-y-1">
+                          {MODEL_OPTIONS[modelType].map((model) => (
+                            <button
+                              key={model.value}
+                              onClick={() => {
+                                setSelectedModel(model)
+                                setShowModelSelector(false)
+                              }}
+                              className={cn(
+                                'w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors',
+                                selectedModel.value === model.value
+                                  ? 'bg-primary-500/20 text-primary-300'
+                                  : 'text-secondary-300 hover:bg-secondary-700'
+                              )}
+                            >
+                              <span>{model.label}</span>
+                              <span className="text-xs text-secondary-500">{model.provider}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </Popover>
                     </div>
                   </div>
 

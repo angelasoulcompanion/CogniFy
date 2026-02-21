@@ -6,6 +6,8 @@
 
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { getScoreColor } from '@/lib/statusColors'
+import { formatAnswer } from '@/lib/formatMarkdown'
 import {
   Sparkles,
   ChevronDown,
@@ -174,11 +176,7 @@ function SourceItem({ source, index }: { source: SearchResult; index: number }) 
           <span
             className={cn(
               'text-[10px] px-1.5 py-0.5 rounded',
-              source.similarity >= 0.7
-                ? 'bg-green-500/20 text-green-400'
-                : source.similarity >= 0.5
-                ? 'bg-yellow-500/20 text-yellow-400'
-                : 'bg-secondary-700 text-secondary-400'
+              getScoreColor(source.similarity, false)
             )}
           >
             {(source.similarity * 100).toFixed(0)}%
@@ -192,88 +190,3 @@ function SourceItem({ source, index }: { source: SearchResult; index: number }) 
   )
 }
 
-// Format answer with proper structure
-function formatAnswer(answer: string): React.ReactNode {
-  // Split by common section patterns
-  const lines = answer.split('\n')
-  const elements: React.ReactNode[] = []
-
-  lines.forEach((line, idx) => {
-    const trimmed = line.trim()
-
-    // Skip empty lines but add spacing
-    if (!trimmed) {
-      elements.push(<div key={idx} className="h-2" />)
-      return
-    }
-
-    // Headers (##, ###, or **Header:**)
-    if (trimmed.startsWith('## ')) {
-      elements.push(
-        <h3 key={idx} className="text-lg font-semibold text-white mt-4 mb-2">
-          {trimmed.replace('## ', '')}
-        </h3>
-      )
-    } else if (trimmed.startsWith('### ')) {
-      elements.push(
-        <h4 key={idx} className="text-base font-medium text-primary-300 mt-3 mb-1">
-          {trimmed.replace('### ', '')}
-        </h4>
-      )
-    } else if (trimmed.match(/^\*\*[^*]+\*\*:?$/)) {
-      // Bold header like **Header:** or **Header**
-      const headerText = trimmed.replace(/\*\*/g, '').replace(/:$/, '')
-      elements.push(
-        <h4 key={idx} className="text-base font-medium text-primary-300 mt-3 mb-1">
-          {headerText}
-        </h4>
-      )
-    }
-    // Bullet points
-    else if (trimmed.startsWith('- ') || trimmed.startsWith('• ')) {
-      const bulletText = trimmed.replace(/^[-•]\s*/, '')
-      elements.push(
-        <div key={idx} className="flex items-start gap-2 ml-2 my-1">
-          <span className="text-primary-400 mt-1">•</span>
-          <span className="text-secondary-200">{formatInlineMarkdown(bulletText)}</span>
-        </div>
-      )
-    }
-    // Numbered items
-    else if (trimmed.match(/^\d+\.\s/)) {
-      const [num, ...rest] = trimmed.split(/\.\s/)
-      elements.push(
-        <div key={idx} className="flex items-start gap-2 ml-2 my-1">
-          <span className="text-primary-400 font-medium min-w-[1.5rem]">{num}.</span>
-          <span className="text-secondary-200">{formatInlineMarkdown(rest.join('. '))}</span>
-        </div>
-      )
-    }
-    // Regular paragraph
-    else {
-      elements.push(
-        <p key={idx} className="text-secondary-200 my-1">
-          {formatInlineMarkdown(trimmed)}
-        </p>
-      )
-    }
-  })
-
-  return elements
-}
-
-// Format inline markdown (bold, italic)
-function formatInlineMarkdown(text: string): React.ReactNode {
-  // Simple bold replacement
-  const parts = text.split(/(\*\*[^*]+\*\*)/g)
-  return parts.map((part, idx) => {
-    if (part.startsWith('**') && part.endsWith('**')) {
-      return (
-        <strong key={idx} className="text-white font-medium">
-          {part.slice(2, -2)}
-        </strong>
-      )
-    }
-    return part
-  })
-}

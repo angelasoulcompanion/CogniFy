@@ -448,15 +448,11 @@ class AdminService:
 
 
 # =============================================================================
-# SINGLETON INSTANCE
+# SERVICE ACCESS
 # =============================================================================
-
-_admin_service: Optional[AdminService] = None
 
 
 def get_admin_service() -> AdminService:
-    """Get global AdminService instance"""
-    global _admin_service
-    if _admin_service is None:
-        _admin_service = AdminService()
-    return _admin_service
+    """Get AdminService via the global ServiceContainer"""
+    from app.core.container import get_container
+    return get_container().admin

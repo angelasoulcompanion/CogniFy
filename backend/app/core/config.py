@@ -4,6 +4,7 @@ Settings management using Pydantic BaseSettings
 """
 
 from typing import List, Optional
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
@@ -76,16 +77,30 @@ class Settings(BaseSettings):
 
     # RAG Settings - HyDE (Hypothetical Document Embedding)
     HYDE_ENABLED: bool = True
-    HYDE_MODEL: str = "qwen2.5:7b"  # Fast model for hypothesis generation
+    HYDE_MODEL: str = "scb10x/typhoon2.5-qwen3-4b"  # Same as LLM_MODEL, bilingual Thai+English
 
     # RAG Settings - Re-ranking
     RERANK_ENABLED: bool = True
-    RERANK_MODEL: str = "qwen2.5:7b"  # LLM for scoring relevance
-    RERANK_TOP_N: int = 20  # Fetch this many before re-ranking
+    RERANK_MODEL: str = "scb10x/typhoon2.5-qwen3-4b"  # Same as LLM_MODEL, bilingual Thai+English
+    RERANK_TOP_N: int = 10  # Fetch this many before re-ranking (was 20, reduced for speed)
     RERANK_RETURN_K: int = 5  # Return this many after re-ranking
 
     # Logging
     LOG_LEVEL: str = "INFO"
+
+    @model_validator(mode="after")
+    def _check_jwt_secret(self) -> "Settings":
+        """Auto-generate JWT secret for local dev, fail in production"""
+        if self.JWT_SECRET_KEY.startswith("your-"):
+            import os
+            if os.environ.get("DOCKER_CONTAINER") or os.environ.get("PRODUCTION"):
+                raise ValueError(
+                    "JWT_SECRET_KEY must be changed from the default placeholder in production. "
+                    "Set JWT_SECRET_KEY in your environment or .env file."
+                )
+            import secrets
+            self.JWT_SECRET_KEY = secrets.token_urlsafe(32)
+        return self
 
     class Config:
         env_file = ".env"

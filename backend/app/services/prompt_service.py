@@ -515,15 +515,11 @@ The prompt should be in {language} language and suitable for {expert_role} exper
 
 
 # =============================================================================
-# SINGLETON ACCESS
+# SERVICE ACCESS
 # =============================================================================
-
-_prompt_service: Optional[PromptService] = None
 
 
 def get_prompt_service() -> PromptService:
-    """Get or create PromptService singleton"""
-    global _prompt_service
-    if _prompt_service is None:
-        _prompt_service = PromptService()
-    return _prompt_service
+    """Get PromptService via the global ServiceContainer"""
+    from app.core.container import get_container
+    return get_container().prompt

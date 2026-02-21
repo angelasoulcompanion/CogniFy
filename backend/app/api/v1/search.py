@@ -10,7 +10,9 @@ from typing import Optional, List
 from uuid import UUID
 
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.core.security import get_current_user, get_current_user_optional, TokenPayload
 from app.services.rag_service import (
@@ -23,6 +25,7 @@ from app.infrastructure.repositories.embedding_repository import get_embedding_r
 
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 # =============================================================================
@@ -106,8 +109,10 @@ class ContextResponse(BaseModel):
 # =============================================================================
 
 @router.post("", response_model=SearchResponse)
+@limiter.limit("30/minute")
 async def semantic_search(
-    request: SearchRequest,
+    request: Request,
+    body: SearchRequest,
     current_user: Optional[TokenPayload] = Depends(get_current_user_optional)
 ):
     """
@@ -122,22 +127,22 @@ async def semantic_search(
     # Build settings
     settings = RAGSettings(
         search_method=SearchMethod.VECTOR,
-        similarity_method=SimilarityMethod(request.similarity_method),
-        similarity_threshold=request.threshold,
-        max_chunks=request.limit,
+        similarity_method=SimilarityMethod(body.similarity_method),
+        similarity_threshold=body.threshold,
+        max_chunks=body.limit,
     )
 
     # Parse document IDs if provided
     doc_ids = None
-    if request.document_ids:
-        doc_ids = [UUID(d) for d in request.document_ids]
+    if body.document_ids:
+        doc_ids = [UUID(d) for d in body.document_ids]
 
     # Get user ID if authenticated
     user_id = UUID(current_user.sub) if current_user else None
 
     # Perform search
     results = await rag_service.search(
-        query=request.query,
+        query=body.query,
         settings=settings,
         user_id=user_id,
         document_ids=doc_ids,
@@ -146,13 +151,13 @@ async def semantic_search(
     search_time_ms = int((time.time() - start_time) * 1000)
 
     return SearchResponse(
-        query=request.query,
+        query=body.query,
         results=[
             SearchResult(
                 chunk_id=str(r.chunk_id),
                 document_id=str(r.document_id),
                 document_name=r.document_title or r.document_filename or "Untitled",
-                content=r.content if request.include_content else "",
+                content=r.content if body.include_content else "",
                 page_number=r.page_number,
                 section_title=r.section_title,
                 similarity=r.score,
@@ -167,8 +172,10 @@ async def semantic_search(
 
 
 @router.post("/hybrid", response_model=SearchResponse)
+@limiter.limit("30/minute")
 async def hybrid_search(
-    request: HybridSearchRequest,
+    request: Request,
+    body: HybridSearchRequest,
     current_user: Optional[TokenPayload] = Depends(get_current_user_optional)
 ):
     """
@@ -183,20 +190,20 @@ async def hybrid_search(
     # Build settings
     settings = RAGSettings(
         search_method=SearchMethod.HYBRID,
-        similarity_threshold=request.threshold,
-        max_chunks=request.limit,
-        bm25_weight=request.bm25_weight,
-        vector_weight=request.vector_weight,
-        rrf_k=request.rrf_k,
+        similarity_threshold=body.threshold,
+        max_chunks=body.limit,
+        bm25_weight=body.bm25_weight,
+        vector_weight=body.vector_weight,
+        rrf_k=body.rrf_k,
     )
 
     # Parse document IDs
-    doc_ids = [UUID(d) for d in request.document_ids] if request.document_ids else None
+    doc_ids = [UUID(d) for d in body.document_ids] if body.document_ids else None
     user_id = UUID(current_user.sub) if current_user else None
 
     # Perform search
     results = await rag_service.search(
-        query=request.query,
+        query=body.query,
         settings=settings,
         user_id=user_id,
         document_ids=doc_ids,
@@ -205,7 +212,7 @@ async def hybrid_search(
     search_time_ms = int((time.time() - start_time) * 1000)
 
     return SearchResponse(
-        query=request.query,
+        query=body.query,
         results=[
             SearchResult(
                 chunk_id=str(r.chunk_id),
@@ -228,8 +235,10 @@ async def hybrid_search(
 
 
 @router.post("/bm25", response_model=SearchResponse)
+@limiter.limit("30/minute")
 async def bm25_search(
-    request: BM25SearchRequest,
+    request: Request,
+    body: BM25SearchRequest,
     current_user: Optional[TokenPayload] = Depends(get_current_user_optional)
 ):
     """
@@ -243,14 +252,14 @@ async def bm25_search(
 
     settings = RAGSettings(
         search_method=SearchMethod.BM25,
-        max_chunks=request.limit,
+        max_chunks=body.limit,
     )
 
-    doc_ids = [UUID(d) for d in request.document_ids] if request.document_ids else None
+    doc_ids = [UUID(d) for d in body.document_ids] if body.document_ids else None
     user_id = UUID(current_user.sub) if current_user else None
 
     results = await rag_service.search(
-        query=request.query,
+        query=body.query,
         settings=settings,
         user_id=user_id,
         document_ids=doc_ids,
@@ -259,7 +268,7 @@ async def bm25_search(
     search_time_ms = int((time.time() - start_time) * 1000)
 
     return SearchResponse(
-        query=request.query,
+        query=body.query,
         results=[
             SearchResult(
                 chunk_id=str(r.chunk_id),
@@ -280,8 +289,10 @@ async def bm25_search(
 
 
 @router.post("/context", response_model=ContextResponse)
+@limiter.limit("30/minute")
 async def build_rag_context(
-    request: ContextRequest,
+    request: Request,
+    body: ContextRequest,
     current_user: Optional[TokenPayload] = Depends(get_current_user_optional)
 ):
     """
@@ -294,24 +305,24 @@ async def build_rag_context(
     rag_service = get_rag_service()
 
     settings = RAGSettings(
-        search_method=SearchMethod(request.search_method),
-        similarity_threshold=request.similarity_threshold,
-        max_chunks=request.max_chunks,
+        search_method=SearchMethod(body.search_method),
+        similarity_threshold=body.similarity_threshold,
+        max_chunks=body.max_chunks,
     )
 
-    doc_ids = [UUID(d) for d in request.document_ids] if request.document_ids else None
+    doc_ids = [UUID(d) for d in body.document_ids] if body.document_ids else None
     user_id = UUID(current_user.sub) if current_user else None
 
     context, results = await rag_service.build_context(
-        query=request.query,
+        query=body.query,
         settings=settings,
         user_id=user_id,
         document_ids=doc_ids,
-        max_context_length=request.max_context_length,
+        max_context_length=body.max_context_length,
     )
 
     return ContextResponse(
-        query=request.query,
+        query=body.query,
         context=context,
         sources=[
             SearchResult(
@@ -331,7 +342,9 @@ async def build_rag_context(
 
 
 @router.post("/similar/{chunk_id}", response_model=SearchResponse)
+@limiter.limit("30/minute")
 async def find_similar_chunks(
+    request: Request,
     chunk_id: UUID,
     limit: int = 5,
     current_user: Optional[TokenPayload] = Depends(get_current_user_optional)

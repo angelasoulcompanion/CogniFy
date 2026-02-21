@@ -6,6 +6,7 @@
 
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { getScoreColor } from '@/lib/statusColors'
 import {
   FileText,
   ChevronDown,
@@ -32,13 +33,6 @@ export function ResultCard({
   isLoadingSimilar,
 }: ResultCardProps) {
   const [expanded, setExpanded] = useState(false)
-
-  // Score color based on value
-  const getScoreColor = (score: number) => {
-    if (score >= 0.7) return 'text-green-400 bg-green-500/20 border-green-500/30'
-    if (score >= 0.5) return 'text-yellow-400 bg-yellow-500/20 border-yellow-500/30'
-    return 'text-secondary-400 bg-secondary-700 border-secondary-600'
-  }
 
   const scoreColor = getScoreColor(result.similarity)
   const scorePercent = (result.similarity * 100).toFixed(1)

@@ -63,5 +63,11 @@ mypy>=1.8.0
 # Logging
 loguru>=0.7.2
 
+# Rate Limiting
+slowapi>=0.1.9
+
+# Retry Logic
+tenacity>=8.2.0
+
 # Environment
 python-dotenv>=1.0.0

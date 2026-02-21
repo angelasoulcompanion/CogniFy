@@ -17,19 +17,16 @@ Created with love by Angela & David - 4 January 2026
 from app.services.embedding_service import (
     EmbeddingService,
     get_embedding_service,
-    shutdown_embedding_service,
     build_embedding_text,
 )
 from app.services.hyde_service import (
     HyDEService,
     get_hyde_service,
-    shutdown_hyde_service,
     HyDEResult,
 )
 from app.services.reranker_service import (
     RerankerService,
     get_reranker_service,
-    shutdown_reranker_service,
     RerankResult,
     RerankScore,
 )
@@ -42,8 +39,8 @@ from app.services.document_service import (
     DocumentService,
     get_document_service,
     process_document_background,
-    TextExtractor,
 )
+from app.services.text_extraction import TextExtractor
 from app.services.rag_service import (
     RAGService,
     get_rag_service,
@@ -55,7 +52,6 @@ from app.services.rag_service import (
 from app.services.llm_service import (
     LLMService,
     get_llm_service,
-    shutdown_llm_service,
     LLMConfig,
     LLMProvider,
     Message,
@@ -77,17 +73,14 @@ __all__ = [
     # Embedding
     "EmbeddingService",
     "get_embedding_service",
-    "shutdown_embedding_service",
     "build_embedding_text",
     # HyDE
     "HyDEService",
     "get_hyde_service",
-    "shutdown_hyde_service",
     "HyDEResult",
     # Reranker
     "RerankerService",
     "get_reranker_service",
-    "shutdown_reranker_service",
     "RerankResult",
     "RerankScore",
     # Chunking
@@ -98,6 +91,7 @@ __all__ = [
     "DocumentService",
     "get_document_service",
     "process_document_background",
+    # Text Extraction
     "TextExtractor",
     # RAG
     "RAGService",
@@ -109,7 +103,6 @@ __all__ = [
     # LLM
     "LLMService",
     "get_llm_service",
-    "shutdown_llm_service",
     "LLMConfig",
     "LLMProvider",
     "Message",

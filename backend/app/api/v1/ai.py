@@ -7,7 +7,9 @@ Updated: Anthropic Claude support - 21 February 2026
 
 from typing import Optional
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.core.security import get_current_user_optional, TokenPayload
 from app.services.llm_service import (
@@ -20,6 +22,7 @@ from app.services.llm_service import (
 
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 # =============================================================================
@@ -49,8 +52,10 @@ class AICompleteResponse(BaseModel):
 # =============================================================================
 
 @router.post("/complete", response_model=AICompleteResponse)
+@limiter.limit("30/minute")
 async def ai_complete(
-    request: AICompleteRequest,
+    request: Request,
+    body: AICompleteRequest,
     current_user: Optional[TokenPayload] = Depends(get_current_user_optional)
 ):
     """
@@ -62,13 +67,13 @@ async def ai_complete(
 
     # Determine provider
     try:
-        provider = LLMProvider(request.provider.lower())
+        provider = LLMProvider(body.provider.lower())
     except ValueError:
         provider = LLMProvider.OLLAMA
 
     # Determine model default per provider
-    if request.model:
-        model = request.model
+    if body.model:
+        model = body.model
     elif provider == LLMProvider.ANTHROPIC:
         model = "claude-sonnet-4-6"
     else:
@@ -90,22 +95,22 @@ async def ai_complete(
     config = LLMConfig(
         provider=provider,
         model=model,
-        temperature=request.temperature,
-        max_tokens=request.max_tokens or 2048,
+        temperature=body.temperature,
+        max_tokens=body.max_tokens or 2048,
     )
 
     # Build messages
     messages = []
 
-    if request.system_prompt:
+    if body.system_prompt:
         messages.append(Message(
             role=MessageRole.SYSTEM,
-            content=request.system_prompt
+            content=body.system_prompt
         ))
 
     messages.append(Message(
         role=MessageRole.USER,
-        content=request.message
+        content=body.message
     ))
 
     # Generate response

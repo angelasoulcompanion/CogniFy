@@ -5,7 +5,6 @@ Supports PostgreSQL, MySQL, and SQL Server
 Created with love by Angela & David - 1 January 2026
 """
 
-import asyncio
 import logging
 from typing import Optional, List, Dict, Any, Tuple
 from uuid import UUID
@@ -845,13 +844,7 @@ class ConnectorService:
             await connector.disconnect()
 
 
-# Singleton instance
-_connector_service: Optional[ConnectorService] = None
-
-
-async def get_connector_service() -> ConnectorService:
-    """Get or create connector service instance"""
-    global _connector_service
-    if _connector_service is None:
-        _connector_service = ConnectorService()
-    return _connector_service
+def get_connector_service() -> ConnectorService:
+    """Get ConnectorService via the global ServiceContainer"""
+    from app.core.container import get_container
+    return get_container().connector

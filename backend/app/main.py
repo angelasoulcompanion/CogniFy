@@ -6,30 +6,39 @@ Created with love by Angela & David
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.core.config import settings
+from app.core.logging import logger, setup_logging
+from app.core.exceptions import CogniFyError
+from app.core.container import get_container, shutdown_container
 from app.infrastructure.database import Database
 from app.api.v1 import auth, documents, search, connectors, admin, prompts, announcements, ai
-from app.services.embedding_service import get_embedding_service, shutdown_embedding_service
-from app.services.llm_service import shutdown_llm_service
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+# Rate limiter (30 requests/minute per IP for search + AI)
+limiter = Limiter(key_func=get_remote_address)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan - startup and shutdown events"""
+    setup_logging()
+
     # Startup
     await Database.connect()
-    print(f"🚀 CogniFy started - {settings.APP_NAME} v{settings.VERSION}")
+    logger.info("CogniFy started - {} v{}", settings.APP_NAME, settings.VERSION)
 
     yield
 
     # Shutdown
-    await shutdown_embedding_service()
-    await shutdown_llm_service()
+    await shutdown_container()
     await Database.disconnect()
-    print("👋 CogniFy shutdown complete")
+    logger.info("CogniFy shutdown complete")
 
 
 app = FastAPI(
@@ -41,6 +50,19 @@ app = FastAPI(
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json"
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+# ---- Global exception handler ----
+@app.exception_handler(CogniFyError)
+async def cognify_error_handler(request: Request, exc: CogniFyError):
+    """Translate domain exceptions into JSON responses"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.message},
+    )
+
 
 # CORS Middleware
 app.add_middleware(
@@ -87,6 +109,6 @@ async def health_check():
 @app.get("/api/health/embedding", tags=["Health"])
 async def embedding_health_check():
     """Check embedding service health"""
-    embedding_service = get_embedding_service()
-    health = await embedding_service.health_check()
+    container = get_container()
+    health = await container.embedding.health_check()
     return health

@@ -1,6 +1,6 @@
 """
 CogniFy Embedding Service
-Singleton pattern with caching and fallback models
+Caching and fallback models for embedding generation
 Pattern from AngelaAI
 """
 
@@ -11,8 +11,11 @@ from datetime import datetime, timedelta
 import asyncio
 
 import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from app.core.config import settings
+from app.core.logging import logger
+from app.core.pgvector import embedding_to_pgvector
 from app.infrastructure.database import Database
 
 
@@ -176,6 +179,12 @@ class EmbeddingService:
             await self._client.aclose()
             self._client = None
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type((httpx.ConnectError, httpx.TimeoutException)),
+        reraise=True,
+    )
     async def _generate_ollama_embedding(
         self,
         text: str,
@@ -194,9 +203,15 @@ class EmbeddingService:
             data = response.json()
             return data.get("embedding")
         except Exception as e:
-            print(f"⚠️ Ollama embedding error ({model}): {e}")
+            logger.warning("Ollama embedding error ({}): {}", model, e)
             return None
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type((httpx.ConnectError, httpx.TimeoutException)),
+        reraise=True,
+    )
     async def _generate_openai_embedding(
         self,
         text: str,
@@ -217,26 +232,13 @@ class EmbeddingService:
             data = response.json()
             return data["data"][0]["embedding"]
         except Exception as e:
-            print(f"⚠️ OpenAI embedding error: {e}")
+            logger.warning("OpenAI embedding error: {}", e)
             return None
 
-    def _embedding_to_pgvector(self, embedding) -> str:
-        """Convert embedding to pgvector string format"""
-        # Already a string - return as-is (but validate format)
-        if isinstance(embedding, str):
-            if embedding.startswith('[') and embedding.endswith(']'):
-                return embedding
-            return "[" + embedding + "]"
-
-        # Nested list [[...]] - unwrap
-        if isinstance(embedding, list) and len(embedding) == 1 and isinstance(embedding[0], list):
-            embedding = embedding[0]
-
-        # Normal list of floats
-        if isinstance(embedding, list):
-            return "[" + ",".join(str(float(x)) for x in embedding) + "]"
-
-        raise ValueError(f"Invalid embedding type: {type(embedding)}")
+    @staticmethod
+    def _embedding_to_pgvector(embedding) -> str:
+        """Convert embedding to pgvector string format (delegates to shared utility)"""
+        return embedding_to_pgvector(embedding)
 
     async def _save_to_db_cache(
         self,
@@ -258,7 +260,7 @@ class EmbeddingService:
                 text_hash, embedding_str, model
             )
         except Exception as e:
-            print(f"⚠️ Failed to cache embedding in DB: {e}")
+            logger.warning("Failed to cache embedding in DB: {}", e)
 
     async def _get_from_db_cache(
         self,
@@ -284,7 +286,7 @@ class EmbeddingService:
                 # If already a list/tuple, convert to list of floats
                 return [float(x) for x in emb]
         except Exception as e:
-            print(f"⚠️ Failed to get embedding from DB cache: {e}")
+            logger.warning("Failed to get embedding from DB cache: {}", e)
         return None
 
     async def get_embedding(
@@ -325,20 +327,20 @@ class EmbeddingService:
 
         # 4. Fallback to secondary model
         if embedding is None and self.fallback_model:
-            print(f"🔄 Trying fallback model: {self.fallback_model}")
+            logger.info("Trying fallback model: {}", self.fallback_model)
             embedding = await self._generate_ollama_embedding(text, self.fallback_model)
             if embedding:
                 model = self.fallback_model
 
         # 5. Fallback to OpenAI
         if embedding is None and self.openai_key:
-            print("🔄 Trying OpenAI embedding")
+            logger.info("Trying OpenAI embedding")
             embedding = await self._generate_openai_embedding(text)
             if embedding:
                 model = "text-embedding-3-small"
 
         if embedding is None:
-            print(f"❌ Failed to generate embedding for text: {text[:50]}...")
+            logger.error("Failed to generate embedding for text: {}...", text[:50])
             return None
 
         # Cache the result
@@ -386,10 +388,10 @@ class EmbeddingService:
             )
             # Extract count from "DELETE X"
             count = int(result.split()[-1]) if result else 0
-            print(f"🧹 Cleaned up {count} expired cache entries")
+            logger.info("Cleaned up {} expired cache entries", count)
             return count
         except Exception as e:
-            print(f"⚠️ Cache cleanup error: {e}")
+            logger.warning("Cache cleanup error: {}", e)
             return 0
 
     async def health_check(self) -> Dict[str, Any]:
@@ -411,23 +413,10 @@ class EmbeddingService:
 
 
 # ============================================================================
-# SINGLETON INSTANCE
+# SINGLETON ACCESS (delegates to ServiceContainer)
 # ============================================================================
 
-_embedding_service: Optional[EmbeddingService] = None
-
-
 def get_embedding_service() -> EmbeddingService:
-    """Get global EmbeddingService instance (singleton pattern)"""
-    global _embedding_service
-    if _embedding_service is None:
-        _embedding_service = EmbeddingService()
-    return _embedding_service
-
-
-async def shutdown_embedding_service() -> None:
-    """Shutdown embedding service and cleanup"""
-    global _embedding_service
-    if _embedding_service:
-        await _embedding_service.close()
-        _embedding_service = None
+    """Get EmbeddingService via the global ServiceContainer"""
+    from app.core.container import get_container
+    return get_container().embedding

@@ -332,23 +332,8 @@ export const documentsApi = {
 // =============================================================================
 
 export const searchApi = {
-  // Basic semantic search
-  semantic: async (query: string, options?: {
-    limit?: number;
-    threshold?: number;
-    documentIds?: string[];
-  }) => {
-    const response = await api.post('/v1/search', {
-      query,
-      limit: options?.limit || 10,
-      threshold: options?.threshold || 0.3,
-      document_ids: options?.documentIds,
-    })
-    return response.data
-  },
-
-  // Enhanced semantic search with similarity method
-  semanticAdvanced: async (options: {
+  // Semantic search (vector similarity)
+  semantic: async (options: {
     query: string;
     limit?: number;
     threshold?: number;
@@ -367,27 +352,8 @@ export const searchApi = {
     return response.data
   },
 
-  // Basic hybrid search
-  hybrid: async (query: string, options?: {
-    limit?: number;
-    threshold?: number;
-    bm25Weight?: number;
-    vectorWeight?: number;
-    documentIds?: string[];
-  }) => {
-    const response = await api.post('/v1/search/hybrid', {
-      query,
-      limit: options?.limit || 10,
-      threshold: options?.threshold || 0.3,
-      bm25_weight: options?.bm25Weight || 0.4,
-      vector_weight: options?.vectorWeight || 0.6,
-      document_ids: options?.documentIds,
-    })
-    return response.data
-  },
-
-  // Enhanced hybrid search with RRF-K
-  hybridAdvanced: async (options: {
+  // Hybrid search (vector + BM25 with RRF)
+  hybrid: async (options: {
     query: string;
     limit?: number;
     threshold?: number;
@@ -465,6 +431,22 @@ export const healthApi = {
 
   embedding: async () => {
     const response = await api.get('/health/embedding')
+    return response.data
+  },
+}
+
+// =============================================================================
+// AI API
+// =============================================================================
+
+export const aiApi = {
+  complete: async (data: {
+    message: string;
+    system_prompt?: string;
+    provider?: string;
+    model?: string;
+  }) => {
+    const response = await api.post('/v1/ai/complete', data)
     return response.data
   },
 }

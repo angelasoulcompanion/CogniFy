@@ -23,6 +23,7 @@ from enum import Enum
 from abc import ABC, abstractmethod
 
 import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from app.core.config import settings
 
@@ -142,6 +143,12 @@ class OllamaProvider(BaseLLMProvider):
         self.base_url = base_url.rstrip("/")
         self.client = httpx.AsyncClient(timeout=120.0)
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type((httpx.ConnectError, httpx.TimeoutException)),
+        reraise=True,
+    )
     async def generate(
         self,
         messages: List[Message],
@@ -300,6 +307,12 @@ class AnthropicProvider(BaseLLMProvider):
                 api_messages.append(m.to_dict())
         return system_prompt, api_messages
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type((httpx.ConnectError, httpx.TimeoutException)),
+        reraise=True,
+    )
     async def generate(
         self,
         messages: List[Message],
@@ -599,25 +612,10 @@ class LLMService:
 
 
 # =============================================================================
-# SINGLETON ACCESS
+# SINGLETON ACCESS (delegates to ServiceContainer)
 # =============================================================================
 
-_llm_service: Optional[LLMService] = None
-
-
 def get_llm_service() -> LLMService:
-    """Get or create LLMService singleton"""
-    global _llm_service
-    if _llm_service is None:
-        _llm_service = LLMService()
-    return _llm_service
-
-
-async def shutdown_llm_service():
-    """Shutdown LLM service and close connections"""
-    global _llm_service
-    if _llm_service:
-        for provider in _llm_service._providers.values():
-            if hasattr(provider, 'client'):
-                await provider.client.aclose()
-        _llm_service = None
+    """Get LLMService via the global ServiceContainer"""
+    from app.core.container import get_container
+    return get_container().llm

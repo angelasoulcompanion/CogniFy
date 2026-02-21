@@ -12,6 +12,7 @@ https://arxiv.org/abs/2212.10496
 Created with love by Angela & David - 4 January 2026
 """
 
+import asyncio
 import time
 from typing import Optional, List
 from dataclasses import dataclass
@@ -19,7 +20,11 @@ from dataclasses import dataclass
 import httpx
 
 from app.core.config import settings
+from app.core.logging import logger
 from app.services.embedding_service import get_embedding_service
+
+# HyDE timeout - fallback to direct embedding if LLM is too slow
+HYDE_TIMEOUT_SECONDS = 5.0
 
 
 @dataclass
@@ -65,7 +70,7 @@ class HyDEService:
     async def generate_hypothetical_answer(
         self,
         query: str,
-        max_tokens: int = 256,
+        max_tokens: int = 128,
     ) -> tuple[str, int]:
         """
         Generate hypothetical answer using LLM
@@ -88,7 +93,8 @@ IMPORTANT:
 - Write in the same language as the question
 - Focus on factual, informative content
 - Include technical terms that would appear in a real document
-- Write 2-3 sentences that directly answer the question"""
+- Write 1-2 sentences that directly answer the question
+- Keep it concise - quality over quantity"""
 
         user_prompt = f"Question: {query}\n\nWrite a document paragraph that answers this:"
 
@@ -118,7 +124,7 @@ IMPORTANT:
             return answer, elapsed
 
         except Exception as e:
-            print(f"⚠️ HyDE generation failed: {e}")
+            logger.warning("HyDE generation failed: {}", e)
             # Fallback: return original query
             elapsed = int((time.time() - start) * 1000)
             return query, elapsed
@@ -180,37 +186,31 @@ IMPORTANT:
             embedding = await self.embedding_service.get_embedding(query)
             return embedding, None
 
-        # HyDE embedding
-        result = await self.generate_hyde_embedding(query)
+        # HyDE with timeout — fallback to direct embedding if too slow
+        try:
+            result = await asyncio.wait_for(
+                self.generate_hyde_embedding(query),
+                timeout=HYDE_TIMEOUT_SECONDS,
+            )
 
-        if result.embedding is None:
-            # Fallback to direct query embedding
+            if result.embedding is None:
+                embedding = await self.embedding_service.get_embedding(query)
+                return embedding, None
+
+            logger.info("HyDE generated ({}ms): {}...", result.generation_time_ms, result.hypothetical_answer[:100])
+            return result.embedding, result.hypothetical_answer
+
+        except asyncio.TimeoutError:
+            logger.warning("HyDE timed out after {}s, using direct query embedding", HYDE_TIMEOUT_SECONDS)
             embedding = await self.embedding_service.get_embedding(query)
             return embedding, None
 
-        print(f"🔮 HyDE generated ({result.generation_time_ms}ms): {result.hypothetical_answer[:100]}...")
-
-        return result.embedding, result.hypothetical_answer
-
 
 # =============================================================================
-# SINGLETON
+# SINGLETON ACCESS (delegates to ServiceContainer)
 # =============================================================================
-
-_hyde_service: Optional[HyDEService] = None
-
 
 def get_hyde_service() -> HyDEService:
-    """Get HyDE service singleton"""
-    global _hyde_service
-    if _hyde_service is None:
-        _hyde_service = HyDEService()
-    return _hyde_service
-
-
-async def shutdown_hyde_service() -> None:
-    """Shutdown HyDE service"""
-    global _hyde_service
-    if _hyde_service:
-        await _hyde_service.close()
-        _hyde_service = None
+    """Get HyDEService via the global ServiceContainer"""
+    from app.core.container import get_container
+    return get_container().hyde

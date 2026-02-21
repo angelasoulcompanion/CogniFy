@@ -7,7 +7,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { searchApi } from '@/services/api'
+import { searchApi, aiApi } from '@/services/api'
 import type {
   SearchConfig,
   SearchResult,
@@ -147,7 +147,7 @@ export function useSearch() {
 
       switch (config.searchType) {
         case 'vector':
-          response = await searchApi.semanticAdvanced({
+          response = await searchApi.semantic({
             query,
             limit: config.maxResults,
             threshold: config.threshold,
@@ -166,7 +166,7 @@ export function useSearch() {
 
         case 'hybrid':
         default:
-          response = await searchApi.hybridAdvanced({
+          response = await searchApi.hybrid({
             query,
             limit: config.maxResults,
             threshold: config.threshold,
@@ -324,28 +324,13 @@ ${context}
 
 กรุณาตอบคำถามโดยใช้ข้อมูลข้างต้น จัดรูปแบบเป็นหัวข้อและ bullet points`
 
-      console.log('[Ask AI] Using model:', model, 'provider:', provider, 'expert:', expert)
-
-      // Call AI API (simple completion without conversation)
-      const response = await fetch('/api/v1/ai/complete', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({
-          message: userMessage,
-          system_prompt: systemPrompt,
-          provider: provider,
-          model: model,
-        }),
+      // Call AI API via shared axios instance (auto token refresh + error handling)
+      const data = await aiApi.complete({
+        message: userMessage,
+        system_prompt: systemPrompt,
+        provider,
+        model,
       })
-
-      if (!response.ok) {
-        throw new Error('Failed to get AI answer')
-      }
-
-      const data = await response.json()
       return data.content || data.message || 'No response'
     },
     onMutate: () => {

@@ -6,465 +6,18 @@ Created with love by Angela & David - 1 January 2026
 """
 
 import os
-import asyncio
-import logging
-from typing import Optional, List, Tuple, Dict, Any
+from typing import Optional, List, Dict, Any
 from uuid import UUID
 from datetime import datetime
-from pathlib import Path
 
 from app.core.config import settings
+from app.core.logging import logger
+from app.core.pgvector import embedding_to_pgvector
 from app.domain.entities.document import Document, DocumentChunk, ProcessingStatus, FileType
 from app.infrastructure.repositories.document_repository import DocumentRepository, DocumentChunkRepository
 from app.services.embedding_service import get_embedding_service, build_embedding_text
 from app.services.chunking_service import get_chunking_service, Chunk
-
-logger = logging.getLogger(__name__)
-
-
-class TextExtractor:
-    """Extract text from various document formats"""
-
-    @staticmethod
-    def _fix_thai_ocr_spaces(text: str) -> str:
-        """
-        Remove spurious spaces between Thai characters.
-        Tesseract Thai OCR commonly inserts spaces between every character:
-            "ก า ร บ ริ ห า ร" → "การบริหาร"
-            "ค ว า ม เ สี่ ย ง" → "ความเสี่ยง"
-        """
-        import re
-
-        if not text:
-            return text
-
-        # Repeatedly remove single spaces between Thai characters
-        # Thai Unicode range: \u0E00-\u0E7F (consonants, vowels, tone marks, digits)
-        prev = None
-        while prev != text:
-            prev = text
-            text = re.sub(r'([\u0E00-\u0E7F]) ([\u0E00-\u0E7F])', r'\1\2', text)
-
-        return text
-
-    @staticmethod
-    def _fix_missing_spaces(text: str) -> str:
-        """
-        Fix missing spaces in extracted PDF text.
-
-        Some PDFs (especially from slides or certain exporters) have text that
-        looks fine visually but has no spaces when extracted.
-
-        Examples:
-            "HowNeuralNetworksWork" → "How Neural Networks Work"
-            "1.Introduction" → "1. Introduction"
-            "ฝึกencoderและdecoder" → "ฝึก encoder และ decoder"
-        """
-        import re
-
-        if not text:
-            return text
-
-        # Thai character range: \u0E00-\u0E7F
-
-        # 1. Add space between Thai and English (Thai followed by English letter)
-        # "ฝึกencoder" → "ฝึก encoder"
-        text = re.sub(r'([\u0E00-\u0E7F])([A-Za-z])', r'\1 \2', text)
-
-        # 2. Add space between English and Thai (English letter followed by Thai)
-        # "encoderและ" → "encoder และ"
-        text = re.sub(r'([A-Za-z])([\u0E00-\u0E7F])', r'\1 \2', text)
-
-        # 3. Add space before capital letters that follow lowercase (camelCase fix)
-        # "HowNeural" → "How Neural"
-        text = re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
-
-        # 4. Add space after numbers followed by letters (except common patterns)
-        # "1Introduction" → "1 Introduction" but keep "3D", "AI", "2x"
-        text = re.sub(r'(\d)([A-Za-z])(?![A-Z0-9]|x\b|D\b)', r'\1 \2', text)
-
-        # 5. Add space after numbers followed by Thai
-        # "1.เริ่มต้น" → "1. เริ่มต้น"
-        text = re.sub(r'(\d\.?)([\u0E00-\u0E7F])', r'\1 \2', text)
-
-        # 6. Add space after period followed by capital letter (sentence boundary)
-        # "end.Start" → "end. Start"
-        text = re.sub(r'\.([A-Z])', r'. \1', text)
-
-        # 7. Add space after common abbreviations without space
-        # "e.g.This" → "e.g. This", "i.e.The" → "i.e. The"
-        text = re.sub(r'(e\.g\.|i\.e\.|etc\.)([A-Z])', r'\1 \2', text)
-
-        # 8. Fix numbered lists without spaces
-        # "1.How" → "1. How"
-        text = re.sub(r'^(\d+\.)([A-Za-z])', r'\1 \2', text, flags=re.MULTILINE)
-
-        # 9. Add space after closing parenthesis followed by letter/Thai
-        # ")The" → ") The", ")และ" → ") และ"
-        text = re.sub(r'\)([A-Za-z\u0E00-\u0E7F])', r') \1', text)
-
-        # 10. Add space before opening parenthesis preceded by letter/Thai
-        # "text(note" → "text (note"
-        text = re.sub(r'([a-z\u0E00-\u0E7F])\(', r'\1 (', text)
-
-        # 11. Add space after colon followed by number or letter (for lists)
-        # "ดังนี้:1" → "ดังนี้: 1"
-        text = re.sub(r':(\d)', r': \1', text)
-
-        # 12. Clean up any double/triple spaces created
-        text = re.sub(r'  +', ' ', text)
-
-        return text
-
-    @staticmethod
-    async def extract_pdf(file_path: str) -> Tuple[str, int, List[Tuple[int, str]]]:
-        """
-        Extract text from PDF using PyMuPDF.
-        Hybrid approach: try text extraction per page, OCR only pages with no text.
-
-        Returns:
-            Tuple of (full_text, page_count, [(page_num, page_text), ...])
-        """
-        try:
-            import fitz  # PyMuPDF
-            import re
-
-            doc = fitz.open(file_path)
-            total_pages = len(doc)
-
-            pages: List[Tuple[int, str]] = []
-            full_text_parts = []
-            ocr_pages = []  # Track pages that need OCR
-
-            # First pass: try text extraction for every page
-            for page_num in range(total_pages):
-                page = doc[page_num]
-                text = page.get_text("text").strip()
-
-                # Check if page has meaningful text
-                has_text = False
-                if text and len(text) >= 50:
-                    real_chars = len(re.findall(r'[a-zA-Z\u0E00-\u0E7F]', text))
-                    if real_chars / max(len(text), 1) >= 0.3:
-                        has_text = True
-
-                if has_text:
-                    text = TextExtractor._fix_missing_spaces(text)
-                    pages.append((page_num + 1, text))
-                    full_text_parts.append(text)
-                else:
-                    # Mark for OCR later
-                    ocr_pages.append(page_num)
-                    pages.append((page_num + 1, ""))
-                    full_text_parts.append("")
-
-            # Second pass: OCR only pages that had no text (using Tesseract for speed)
-            if ocr_pages:
-                print(f"📷 OCR needed for {len(ocr_pages)}/{total_pages} pages (Tesseract batch)...")
-                try:
-                    import pytesseract
-                    from PIL import Image
-                    import io
-
-                    for page_num in ocr_pages:
-                        page = doc[page_num]
-                        print(f"   🔍 OCR page {page_num + 1}/{total_pages}...")
-
-                        mat = fitz.Matrix(2.0, 2.0)
-                        pix = page.get_pixmap(matrix=mat)
-                        img = Image.open(io.BytesIO(pix.tobytes("png")))
-
-                        text = pytesseract.image_to_string(
-                            img, lang="tha+eng",
-                            config="--psm 1 --oem 3",
-                        )
-                        text = TextExtractor._fix_thai_ocr_spaces(text.strip())
-                        text = TextExtractor._fix_missing_spaces(text)
-                        pages[page_num] = (page_num + 1, text)
-                        full_text_parts[page_num] = text
-
-                except ImportError:
-                    print("⚠️ Tesseract not available, skipping OCR pages")
-                except Exception as e:
-                    print(f"⚠️ Batch OCR error: {e}")
-
-            doc.close()
-
-            full_text = "\n\n".join(full_text_parts)
-            return full_text, len(pages), pages
-
-        except ImportError:
-            print("⚠️ PyMuPDF not installed. Install with: pip install PyMuPDF")
-            raise
-        except Exception as e:
-            print(f"❌ PDF extraction error: {e}")
-            raise
-
-    @staticmethod
-    async def _ocr_pdf(doc) -> Tuple[List[Tuple[int, str]], List[str]]:
-        """
-        OCR all pages of a PDF using Typhoon-OCR via Ollama.
-        Supports Thai + English text.
-        """
-        import fitz  # PyMuPDF
-        import os
-
-        from app.services.ocr_service import get_ocr_service
-        ocr_service = get_ocr_service()
-
-        pages: List[Tuple[int, str]] = []
-        full_text_parts = []
-        total_pages = len(doc)
-
-        for page_num in range(total_pages):
-            page = doc[page_num]
-            print(f"   🔍 OCR page {page_num + 1}/{total_pages}...")
-
-            # Render page to image (2x zoom for better quality)
-            mat = fitz.Matrix(2.0, 2.0)
-            pix = page.get_pixmap(matrix=mat)
-
-            temp_path = f"/tmp/ocr_page_{page_num}.png"
-            pix.save(temp_path)
-
-            try:
-                result = await ocr_service.extract_text(temp_path)
-                text = TextExtractor._fix_missing_spaces(result.text)
-                pages.append((page_num + 1, text))
-                full_text_parts.append(text)
-            except Exception as e:
-                print(f"   ⚠️ OCR failed for page {page_num + 1}: {e}")
-                pages.append((page_num + 1, ""))
-                full_text_parts.append("")
-            finally:
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-
-        return pages, full_text_parts
-
-    @staticmethod
-    async def extract_docx(file_path: str) -> Tuple[str, int, List[Tuple[int, str]]]:
-        """
-        Extract text from DOCX using python-docx.
-
-        Returns:
-            Tuple of (full_text, page_count, [(page_num, page_text), ...])
-        """
-        try:
-            from docx import Document as DocxDocument
-
-            doc = DocxDocument(file_path)
-            paragraphs = []
-
-            for para in doc.paragraphs:
-                if para.text.strip():
-                    paragraphs.append(para.text)
-
-            # Also extract text from tables
-            for table in doc.tables:
-                for row in table.rows:
-                    row_text = []
-                    for cell in row.cells:
-                        if cell.text.strip():
-                            row_text.append(cell.text.strip())
-                    if row_text:
-                        paragraphs.append(" | ".join(row_text))
-
-            full_text = "\n\n".join(paragraphs)
-
-            # DOCX doesn't have clear page breaks, estimate 1 page per 3000 chars
-            estimated_pages = max(1, len(full_text) // 3000)
-            pages = [(1, full_text)]  # Treat as single page
-
-            return full_text, estimated_pages, pages
-
-        except ImportError:
-            print("⚠️ python-docx not installed. Install with: pip install python-docx")
-            raise
-        except Exception as e:
-            print(f"❌ DOCX extraction error: {e}")
-            raise
-
-    @staticmethod
-    async def extract_txt(file_path: str) -> Tuple[str, int, List[Tuple[int, str]]]:
-        """
-        Extract text from plain text file.
-
-        Returns:
-            Tuple of (full_text, page_count, [(page_num, page_text), ...])
-        """
-        try:
-            # Try different encodings
-            encodings = ['utf-8', 'utf-8-sig', 'tis-620', 'cp874', 'latin-1']
-
-            for encoding in encodings:
-                try:
-                    with open(file_path, 'r', encoding=encoding) as f:
-                        full_text = f.read()
-                    break
-                except UnicodeDecodeError:
-                    continue
-            else:
-                raise ValueError(f"Could not decode file with any encoding: {encodings}")
-
-            # Estimate pages (1 page per 3000 chars)
-            estimated_pages = max(1, len(full_text) // 3000)
-            pages = [(1, full_text)]
-
-            return full_text, estimated_pages, pages
-
-        except Exception as e:
-            print(f"❌ TXT extraction error: {e}")
-            raise
-
-    @staticmethod
-    async def extract_xlsx(file_path: str) -> Tuple[str, int, List[Tuple[int, str]]]:
-        """
-        Extract text from Excel file.
-
-        Returns:
-            Tuple of (full_text, sheet_count, [(sheet_num, sheet_text), ...])
-        """
-        try:
-            from openpyxl import load_workbook
-
-            wb = load_workbook(file_path, read_only=True, data_only=True)
-            sheets: List[Tuple[int, str]] = []
-            full_text_parts = []
-
-            for sheet_num, sheet_name in enumerate(wb.sheetnames, 1):
-                ws = wb[sheet_name]
-                sheet_lines = [f"## Sheet: {sheet_name}\n"]
-
-                for row in ws.iter_rows(values_only=True):
-                    row_values = [str(cell) if cell is not None else "" for cell in row]
-                    if any(v.strip() for v in row_values):
-                        sheet_lines.append(" | ".join(row_values))
-
-                sheet_text = "\n".join(sheet_lines)
-                sheets.append((sheet_num, sheet_text))
-                full_text_parts.append(sheet_text)
-
-            wb.close()
-
-            full_text = "\n\n".join(full_text_parts)
-            return full_text, len(sheets), sheets
-
-        except ImportError:
-            print("⚠️ openpyxl not installed. Install with: pip install openpyxl")
-            raise
-        except Exception as e:
-            print(f"❌ Excel extraction error: {e}")
-            raise
-
-    @staticmethod
-    async def extract_image(file_path: str) -> Tuple[str, int, List[Tuple[int, str]]]:
-        """
-        Extract text from image using OCR.
-
-        Supports: PNG, JPG, JPEG
-        Uses Typhoon-OCR 1.5-3B via Ollama (fallback: Tesseract)
-
-        Returns:
-            Tuple of (full_text, page_count, [(page_num, page_text), ...])
-        """
-        try:
-            from app.services.ocr_service import get_ocr_service
-
-            ocr_service = get_ocr_service()
-            result = await ocr_service.extract_text(file_path)
-
-            full_text = result.text
-            confidence = result.confidence
-
-            logger.info(f"🔍 OCR completed: {len(full_text)} chars, {confidence:.1%} confidence, engine: {result.engine}")
-
-            # Return as single page
-            pages = [(1, full_text)]
-            return full_text, 1, pages
-
-        except ImportError as e:
-            logger.warning(f"⚠️ OCR dependencies not installed: {e}")
-            raise ValueError(
-                "OCR is not available. Ensure Typhoon-OCR model is pulled: ollama pull scb10x/typhoon-ocr1.5-3b"
-            )
-        except Exception as e:
-            logger.error(f"❌ Image OCR error: {e}")
-            raise
-
-    @staticmethod
-    async def extract_pdf_with_ocr(file_path: str) -> Tuple[str, int, List[Tuple[int, str]]]:
-        """
-        Extract text from scanned PDF using OCR.
-
-        This is used when regular PDF extraction returns no text (scanned document).
-
-        Returns:
-            Tuple of (full_text, page_count, [(page_num, page_text), ...])
-        """
-        try:
-            from app.services.ocr_service import get_ocr_service
-
-            ocr_service = get_ocr_service()
-            full_text, page_results = await ocr_service.extract_from_pdf_images(file_path, dpi=300)
-
-            pages = [(p['page'], p['text']) for p in page_results]
-
-            avg_confidence = sum(p['confidence'] for p in page_results) / len(page_results) if page_results else 0
-            logger.info(f"🔍 PDF OCR completed: {len(pages)} pages, {avg_confidence:.1%} avg confidence")
-
-            return full_text, len(pages), pages
-
-        except ImportError as e:
-            logger.warning(f"⚠️ OCR dependencies not installed: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"❌ PDF OCR error: {e}")
-            raise
-
-    @classmethod
-    async def extract(
-        cls,
-        file_path: str,
-        file_type: FileType,
-        use_ocr_fallback: bool = True,
-    ) -> Tuple[str, int, List[Tuple[int, str]]]:
-        """
-        Extract text from document based on file type.
-
-        Args:
-            file_path: Path to the file
-            file_type: Type of file
-            use_ocr_fallback: If True, use OCR for scanned PDFs with no text
-
-        Returns:
-            Tuple of (full_text, page_count, [(page_num, page_text), ...])
-        """
-        # Image files - always use OCR
-        if file_type in (FileType.PNG, FileType.JPG, FileType.JPEG):
-            logger.info(f"🖼️ Processing image file with OCR: {file_path}")
-            return await cls.extract_image(file_path)
-
-        # PDF files - try text extraction first, fallback to OCR
-        if file_type == FileType.PDF:
-            full_text, page_count, pages = await cls.extract_pdf(file_path)
-
-            # Check if PDF is scanned (no text)
-            if use_ocr_fallback and not full_text.strip():
-                logger.info(f"📄 PDF appears to be scanned, using OCR fallback...")
-                return await cls.extract_pdf_with_ocr(file_path)
-
-            return full_text, page_count, pages
-
-        # Other document types
-        if file_type in (FileType.DOCX, FileType.DOC):
-            return await cls.extract_docx(file_path)
-        elif file_type == FileType.TXT:
-            return await cls.extract_txt(file_path)
-        elif file_type in (FileType.XLSX, FileType.XLS):
-            return await cls.extract_xlsx(file_path)
-        else:
-            raise ValueError(f"Unsupported file type: {file_type}")
+from app.services.text_extraction import TextExtractor
 
 
 class DocumentService:
@@ -516,7 +69,7 @@ class DocumentService:
                 await on_progress("extracting", 0)
 
             # 1. Extract text
-            print(f"📄 Extracting text from {document.original_filename}...")
+            logger.info("Extracting text from {}", document.original_filename)
             full_text, page_count, pages = await TextExtractor.extract(
                 document.file_path,
                 document.file_type
@@ -533,19 +86,19 @@ class DocumentService:
                 await on_progress("chunking", 20)
 
             # 2. Chunk text
-            print(f"✂️ Chunking text into segments...")
+            logger.info("Chunking text into segments")
             if len(pages) > 1:
                 chunks = self.chunking_service.chunk_by_pages(pages)
             else:
                 chunks = self.chunking_service.chunk_text(full_text)
 
-            print(f"   Created {len(chunks)} chunks")
+            logger.info("Created {} chunks", len(chunks))
 
             if on_progress:
                 await on_progress("embedding", 40)
 
             # 3. Generate embeddings with enriched context
-            print(f"🧠 Generating embeddings with document context...")
+            logger.info("Generating embeddings with document context")
             document_title = document.original_filename
             chunk_texts = [
                 build_embedding_text(
@@ -563,13 +116,13 @@ class DocumentService:
 
             # Count successful embeddings
             successful = sum(1 for e in embeddings if e is not None)
-            print(f"   Generated {successful}/{len(chunks)} embeddings")
+            logger.info("Generated {}/{} embeddings", successful, len(chunks))
 
             if on_progress:
                 await on_progress("storing", 80)
 
             # 4. Create DocumentChunk entities
-            print(f"💾 Storing chunks...")
+            logger.info("Storing chunks")
             document_chunks: List[DocumentChunk] = []
 
             for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
@@ -598,13 +151,12 @@ class DocumentService:
             if on_progress:
                 await on_progress("completed", 100)
 
-            print(f"✅ Document processed successfully: {document.original_filename}")
-            print(f"   Pages: {page_count}, Chunks: {len(document_chunks)}")
+            logger.info("Document processed: {} — pages={}, chunks={}", document.original_filename, page_count, len(document_chunks))
 
             return await self.document_repo.get_by_id(document_id)
 
         except Exception as e:
-            print(f"❌ Document processing error: {e}")
+            logger.error("Document processing error: {}", e)
             await self._fail_document(document_id, str(e))
             raise
 
@@ -662,7 +214,7 @@ def process_document_background(document_id: UUID) -> None:
     import asyncio
     import asyncpg
 
-    print(f"🚀 Starting background processing for document: {document_id}")
+    logger.info("Starting background processing for document: {}", document_id)
 
     async def _process_with_own_connection():
         """Process document with its own database connection"""
@@ -681,7 +233,7 @@ def process_document_background(document_id: UUID) -> None:
             )
 
             if not doc_row:
-                print(f"❌ Document not found: {document_id}")
+                logger.error("Document not found: {}", document_id)
                 return
 
             file_path = doc_row['file_path']
@@ -693,7 +245,7 @@ def process_document_background(document_id: UUID) -> None:
                     "UPDATE documents SET processing_status = $1, processing_error = $2 WHERE document_id = $3",
                     'failed', 'File not found', document_id
                 )
-                print(f"❌ File not found: {file_path}")
+                logger.error("File not found: {}", file_path)
                 return
 
             # 2. Update status to processing
@@ -703,7 +255,7 @@ def process_document_background(document_id: UUID) -> None:
             )
 
             # 3. Extract text
-            print(f"📄 Extracting text from {original_filename}...")
+            logger.info("Extracting text from {}", original_filename)
             from app.domain.entities.document import FileType
             file_type = FileType(file_type_str)
             full_text, page_count, pages = await TextExtractor.extract(file_path, file_type)
@@ -713,7 +265,7 @@ def process_document_background(document_id: UUID) -> None:
                     "UPDATE documents SET processing_status = $1, processing_error = $2 WHERE document_id = $3",
                     'failed', 'No text content found', document_id
                 )
-                print(f"❌ No text content found")
+                logger.error("No text content found")
                 return
 
             # 4. Chunk text
@@ -721,7 +273,7 @@ def process_document_background(document_id: UUID) -> None:
                 "UPDATE documents SET processing_step = $1, processing_progress = $2 WHERE document_id = $3",
                 'chunking', 25, document_id
             )
-            print(f"✂️ Chunking text into segments...")
+            logger.info("Chunking text into segments")
             chunking_service = get_chunking_service()
 
             # Calculate average chars per page to detect slides/short content
@@ -729,7 +281,7 @@ def process_document_background(document_id: UUID) -> None:
 
             if avg_chars_per_page < 500 and len(pages) > 1:
                 # Short content per page (likely slides) - use 1 page = 1 chunk
-                print(f"   Detected slides/short content ({avg_chars_per_page:.0f} chars/page avg)")
+                logger.info("Detected slides/short content ({:.0f} chars/page avg)", avg_chars_per_page)
                 chunks = []
                 for page_num, page_text in pages:
                     if page_text.strip():  # Skip empty pages
@@ -747,14 +299,14 @@ def process_document_background(document_id: UUID) -> None:
                 chunks = chunking_service.chunk_by_pages(pages)
             else:
                 chunks = chunking_service.chunk_text(full_text)
-            print(f"   Created {len(chunks)} chunks")
+            logger.info("Created {} chunks", len(chunks))
 
             # 5. Generate embeddings (direct Ollama call to avoid event loop issues)
             await conn.execute(
                 "UPDATE documents SET processing_step = $1, processing_progress = $2 WHERE document_id = $3",
                 'embedding', 40, document_id
             )
-            print(f"🧠 Generating embeddings...")
+            logger.info("Generating embeddings")
             import httpx
             embeddings = []
             total_chunks = len(chunks)
@@ -778,10 +330,10 @@ def process_document_background(document_id: UUID) -> None:
                         else:
                             embeddings.append(None)
                 except Exception as emb_err:
-                    print(f"⚠️ Embedding error for chunk {i}: {emb_err}")
+                    logger.warning("Embedding error for chunk {}: {}", i, emb_err)
                     embeddings.append(None)
             successful = sum(1 for e in embeddings if e is not None)
-            print(f"   Generated {successful}/{len(chunks)} embeddings")
+            logger.info("Generated {}/{} embeddings", successful, len(chunks))
 
             # 6. Delete existing chunks
             await conn.execute(
@@ -794,14 +346,11 @@ def process_document_background(document_id: UUID) -> None:
                 "UPDATE documents SET processing_step = $1, processing_progress = $2 WHERE document_id = $3",
                 'storing', 90, document_id
             )
-            print(f"💾 Storing chunks...")
+            logger.info("Storing chunks")
             for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
                 import uuid
                 chunk_id = uuid.uuid4()
-                # Convert embedding list to pgvector format string
-                embedding_str = None
-                if embedding:
-                    embedding_str = '[' + ','.join(str(x) for x in embedding) + ']'
+                embedding_str = embedding_to_pgvector(embedding) if embedding else None
                 # Truncate section_title to 500 chars to fit VARCHAR(500)
                 section_title = chunk.section_title[:500] if chunk.section_title else None
                 await conn.execute(
@@ -825,13 +374,10 @@ def process_document_background(document_id: UUID) -> None:
                 'completed', 'completed', 100, page_count, len(chunks), datetime.now(), document_id
             )
 
-            print(f"✅ Document processed successfully: {original_filename}")
-            print(f"   Pages: {page_count}, Chunks: {len(chunks)}")
+            logger.info("Document processed: {} — pages={}, chunks={}", original_filename, page_count, len(chunks))
 
         except Exception as e:
-            print(f"❌ Processing error: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception("Processing error: {}", e)
             await conn.execute(
                 "UPDATE documents SET processing_status = $1, processing_error = $2 WHERE document_id = $3",
                 'failed', str(e)[:500], document_id
@@ -843,21 +389,14 @@ def process_document_background(document_id: UUID) -> None:
     try:
         asyncio.run(_process_with_own_connection())
     except Exception as e:
-        print(f"❌ Background task failed: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Background task failed: {}", e)
 
 
 # ============================================================================
-# SINGLETON INSTANCE
+# SINGLETON ACCESS (delegates to ServiceContainer)
 # ============================================================================
-
-_document_service: Optional[DocumentService] = None
-
 
 def get_document_service() -> DocumentService:
-    """Get global DocumentService instance"""
-    global _document_service
-    if _document_service is None:
-        _document_service = DocumentService()
-    return _document_service
+    """Get DocumentService via the global ServiceContainer"""
+    from app.core.container import get_container
+    return get_container().document

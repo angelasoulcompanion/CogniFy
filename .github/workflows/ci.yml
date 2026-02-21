@@ -62,16 +62,17 @@ jobs:
       - name: Run type checking
         working-directory: ./backend
         run: |
-          mypy app --ignore-missing-imports --no-error-summary || true
+          mypy app --ignore-missing-imports --no-error-summary
 
       - name: Run tests
         working-directory: ./backend
         env:
           DATABASE_URL: postgresql://cognify:cognify123@localhost:5432/cognify_test
           JWT_SECRET_KEY: test-secret-key
+          DEBUG: 'true'
           TESTING: '1'
         run: |
-          pytest tests/ -v --tb=short -m "unit" || true
+          pytest tests/ -v --tb=short -m "unit"
 
   # ===========================================================================
   # Frontend Tests
@@ -97,11 +98,11 @@ jobs:
 
       - name: Run linting
         working-directory: ./frontend
-        run: npm run lint || true
+        run: npm run lint
 
       - name: Run type checking
         working-directory: ./frontend
-        run: npx tsc --noEmit || true
+        run: npx tsc --noEmit
 
       - name: Run tests
         working-directory: ./frontend

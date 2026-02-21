@@ -129,7 +129,7 @@ async def create_connection(
                 detail=f"Invalid database type. Must be one of: postgresql, mysql, sqlserver"
             )
 
-        service = await get_connector_service()
+        service = get_connector_service()
         connection = await service.create_connection(
             name=request.name,
             db_type=request.db_type,
@@ -156,7 +156,7 @@ async def list_connections(
     current_user: TokenPayload = Depends(get_current_user),
 ):
     """List all database connections"""
-    service = await get_connector_service()
+    service = get_connector_service()
 
     # Admin sees all, others see only their own
     user_id = None if current_user.role == "admin" else UUID(current_user.sub)
@@ -171,7 +171,7 @@ async def get_connection(
     current_user: TokenPayload = Depends(get_current_user),
 ):
     """Get a specific database connection"""
-    service = await get_connector_service()
+    service = get_connector_service()
     connection = await service.get_connection(connection_id)
 
     if not connection:
@@ -191,7 +191,7 @@ async def update_connection(
     current_user: TokenPayload = Depends(get_current_user),
 ):
     """Update a database connection"""
-    service = await get_connector_service()
+    service = get_connector_service()
     connection = await service.get_connection(connection_id)
 
     if not connection:
@@ -221,7 +221,7 @@ async def delete_connection(
     current_user: TokenPayload = Depends(get_current_user),
 ):
     """Delete (deactivate) a database connection"""
-    service = await get_connector_service()
+    service = get_connector_service()
     connection = await service.get_connection(connection_id)
 
     if not connection:
@@ -241,7 +241,7 @@ async def test_new_connection(
 ):
     """Test a new connection without saving"""
     try:
-        service = await get_connector_service()
+        service = get_connector_service()
         success, error = await service.test_new_connection(
             db_type=request.db_type,
             host=request.host,
@@ -261,7 +261,7 @@ async def test_existing_connection(
     current_user: TokenPayload = Depends(get_current_user),
 ):
     """Test an existing connection"""
-    service = await get_connector_service()
+    service = get_connector_service()
     connection = await service.get_connection(connection_id)
 
     if not connection:
@@ -277,7 +277,7 @@ async def discover_schema(
     current_user: TokenPayload = Depends(get_current_user),
 ):
     """Discover database schema (tables and columns)"""
-    service = await get_connector_service()
+    service = get_connector_service()
     connection = await service.get_connection(connection_id)
 
     if not connection:
@@ -305,7 +305,7 @@ async def sync_connection(
     Sync database data to document chunks for RAG.
     Runs in background for large datasets.
     """
-    service = await get_connector_service()
+    service = get_connector_service()
     connection = await service.get_connection(connection_id)
 
     if not connection:
@@ -338,7 +338,7 @@ async def preview_table_data(
     current_user: TokenPayload = Depends(get_current_user),
 ):
     """Preview data from a table"""
-    service = await get_connector_service()
+    service = get_connector_service()
     connection = await service.get_connection(connection_id)
 
     if not connection:
@@ -362,7 +362,7 @@ async def execute_query(
     current_user: TokenPayload = Depends(get_current_user),
 ):
     """Execute a custom SELECT query"""
-    service = await get_connector_service()
+    service = get_connector_service()
     connection = await service.get_connection(connection_id)
 
     if not connection:

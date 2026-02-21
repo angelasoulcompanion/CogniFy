@@ -10,6 +10,7 @@ import asyncpg
 from asyncpg import Pool, Connection, Record
 
 from app.core.config import settings
+from app.core.logging import logger
 
 
 class Database:
@@ -31,7 +32,7 @@ class Database:
                 max_inactive_connection_lifetime=300,
                 command_timeout=60,
             )
-            print(f"✅ Database pool created: {settings.DATABASE_URL.split('@')[-1]}")
+            logger.info("Database pool created: {}", settings.DATABASE_URL.split("@")[-1])
 
     @classmethod
     async def disconnect(cls) -> None:
@@ -39,7 +40,7 @@ class Database:
         if cls._pool is not None:
             await cls._pool.close()
             cls._pool = None
-            print("✅ Database pool closed")
+            logger.info("Database pool closed")
 
     @classmethod
     async def health_check(cls) -> bool:

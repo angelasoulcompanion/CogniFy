@@ -10,11 +10,13 @@ Provides:
 Created with love by Angela & David - 1 January 2026
 """
 
+import asyncio
 from typing import List, Optional, Dict, Any, Tuple
 from uuid import UUID
 from dataclasses import dataclass
 from enum import Enum
 
+from app.core.pgvector import embedding_to_pgvector
 from app.services.embedding_service import get_embedding_service
 from app.services.hyde_service import get_hyde_service
 from app.services.reranker_service import get_reranker_service
@@ -456,23 +458,25 @@ class RAGService:
         """
         settings = settings or RAGSettings()
 
-        # Get results from both methods
-        vector_results = await self.vector_search(
-            query=query,
-            settings=RAGSettings(
-                similarity_method=settings.similarity_method,
-                similarity_threshold=settings.similarity_threshold,
-                max_chunks=settings.max_chunks * 2,  # Get more for merging
+        # Get results from both methods IN PARALLEL
+        vector_results, bm25_results = await asyncio.gather(
+            self.vector_search(
+                query=query,
+                settings=RAGSettings(
+                    similarity_method=settings.similarity_method,
+                    similarity_threshold=settings.similarity_threshold,
+                    max_chunks=settings.max_chunks * 2,  # Get more for merging
+                    hyde_enabled=settings.hyde_enabled,
+                ),
+                user_id=user_id,
+                document_ids=document_ids,
             ),
-            user_id=user_id,
-            document_ids=document_ids,
-        )
-
-        bm25_results = await self.bm25_search(
-            query=query,
-            settings=RAGSettings(max_chunks=settings.max_chunks * 2),
-            user_id=user_id,
-            document_ids=document_ids,
+            self.bm25_search(
+                query=query,
+                settings=RAGSettings(max_chunks=settings.max_chunks * 2),
+                user_id=user_id,
+                document_ids=document_ids,
+            ),
         )
 
         # Build rank maps
@@ -594,44 +598,17 @@ class RAGService:
         }
         return operators.get(method, "<=>")
 
-    def _embedding_to_pgvector(self, embedding: Any) -> str:
-        """
-        Convert embedding to pgvector string format.
-
-        pgvector expects: "[0.1,0.2,0.3,...]" as string
-        Input could be: list, numpy array, or already a string
-        """
-        # Already a string
-        if isinstance(embedding, str):
-            # Clean it up if needed
-            if embedding.startswith('[') and embedding.endswith(']'):
-                return embedding
-            return f"[{embedding}]"
-
-        # If it's a list or array, convert to string
-        if hasattr(embedding, '__iter__'):
-            # Flatten if nested
-            flat = embedding
-            if len(embedding) > 0 and hasattr(embedding[0], '__iter__') and not isinstance(embedding[0], str):
-                flat = embedding[0]
-
-            # Convert to string format
-            values = ','.join(str(float(v)) for v in flat)
-            return f"[{values}]"
-
-        raise ValueError(f"Cannot convert embedding of type {type(embedding)} to pgvector format")
+    @staticmethod
+    def _embedding_to_pgvector(embedding: Any) -> str:
+        """Convert embedding to pgvector string format (delegates to shared utility)"""
+        return embedding_to_pgvector(embedding)
 
 
 # ============================================================================
-# SINGLETON ACCESS
+# SINGLETON ACCESS (delegates to ServiceContainer)
 # ============================================================================
-
-_rag_service: Optional[RAGService] = None
-
 
 def get_rag_service() -> RAGService:
-    """Get or create RAGService singleton"""
-    global _rag_service
-    if _rag_service is None:
-        _rag_service = RAGService()
-    return _rag_service
+    """Get RAGService via the global ServiceContainer"""
+    from app.core.container import get_container
+    return get_container().rag

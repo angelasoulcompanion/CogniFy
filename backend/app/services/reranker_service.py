@@ -12,6 +12,7 @@ Flow:
 Created with love by Angela & David - 4 January 2026
 """
 
+import asyncio
 import time
 import json
 import re
@@ -22,6 +23,11 @@ from uuid import UUID
 import httpx
 
 from app.core.config import settings
+from app.core.logging import logger
+
+# Re-ranking batch config
+RERANK_BATCH_SIZE = 5  # Score 5 results per LLM call
+RERANK_MAX_CONCURRENT = 4  # Max parallel LLM calls
 
 
 @dataclass
@@ -70,52 +76,52 @@ class RerankerService:
         top_k: int = 5,
     ) -> List[dict]:
         """
-        Re-rank search results using LLM
+        Re-rank search results using a single fast LLM call.
 
-        Args:
-            query: Original search query
-            results: List of search results with 'chunk_id' and 'content'
-            top_k: Number of top results to return
-
-        Returns:
-            Re-ranked list of results (top_k)
+        Ollama processes requests sequentially, so batching doesn't help.
+        Instead we minimize tokens: fewer results + shorter content.
         """
         if not results:
             return []
 
         if len(results) <= top_k:
-            # No need to re-rank if we have fewer results than top_k
             return results
 
         start = time.time()
 
-        # Build prompt for batch scoring
-        system_prompt = """You are a relevance scoring expert. Score how relevant each document is to the query.
+        try:
+            scores = await self._score_batch(query, results)
 
-SCORING RULES:
-- Score 1-10 (10 = highly relevant, 1 = not relevant)
-- Score 8-10: Directly answers the query or contains exact information needed
-- Score 5-7: Related topic but doesn't directly answer
-- Score 1-4: Barely related or unrelated
+            for result, score in zip(results, scores):
+                result["rerank_score"] = score
 
-OUTPUT FORMAT:
-Return ONLY a JSON array with scores like:
-[{"id": 1, "score": 8}, {"id": 2, "score": 3}, ...]
+            sorted_results = sorted(
+                results,
+                key=lambda x: x.get("rerank_score", 0),
+                reverse=True,
+            )
 
-No explanation, just the JSON array."""
+            elapsed = int((time.time() - start) * 1000)
+            logger.info("Re-ranked {} results in {}ms", len(results), elapsed)
 
-        # Build documents list
+            return sorted_results[:top_k]
+
+        except Exception as e:
+            logger.warning("Re-ranking failed: {}, returning original order", e)
+            return results[:top_k]
+
+    async def _score_batch(self, query: str, batch: List[dict]) -> List[float]:
+        """Score results via a single LLM call with minimal tokens"""
+        system_prompt = """Score each document's relevance to the query (1-10).
+9-10: Directly answers. 5-8: Related. 1-4: Not relevant.
+Return ONLY JSON: [{"id":1,"score":8},{"id":2,"score":3},...]"""
+
         docs_text = ""
-        for i, result in enumerate(results, 1):
-            content = result.get("content", "")[:500]  # Truncate for efficiency
-            docs_text += f"\n[Document {i}]\n{content}\n"
+        for i, result in enumerate(batch, 1):
+            content = result.get("content", "")[:200]
+            docs_text += f"\n[{i}] {content}\n"
 
-        user_prompt = f"""Query: {query}
-
-Documents to score:
-{docs_text}
-
-Score each document (1-10) for relevance to the query. Return JSON array:"""
+        user_prompt = f"Query: {query}\n{docs_text}\nJSON scores:"
 
         try:
             client = await self._get_client()
@@ -129,37 +135,18 @@ Score each document (1-10) for relevance to the query. Return JSON array:"""
                     ],
                     "stream": False,
                     "options": {
-                        "temperature": 0.1,  # Low temperature for consistency
-                        "num_predict": 512,
-                    }
-                }
+                        "temperature": 0.0,
+                        "num_predict": 128,
+                    },
+                },
             )
             response.raise_for_status()
             data = response.json()
             llm_response = data.get("message", {}).get("content", "")
-
-            # Parse scores
-            scores = self._parse_scores(llm_response, len(results))
-
-            # Apply scores to results
-            for result, score in zip(results, scores):
-                result["rerank_score"] = score
-
-            # Sort by rerank_score
-            sorted_results = sorted(
-                results,
-                key=lambda x: x.get("rerank_score", 0),
-                reverse=True
-            )
-
-            elapsed = int((time.time() - start) * 1000)
-            print(f"🎯 Re-ranked {len(results)} results in {elapsed}ms")
-
-            return sorted_results[:top_k]
-
+            return self._parse_scores(llm_response, len(batch))
         except Exception as e:
-            print(f"⚠️ Re-ranking failed: {e}, returning original order")
-            return results[:top_k]
+            logger.warning("Batch scoring failed: {}", e)
+            return [5.0] * len(batch)
 
     def _parse_scores(self, llm_response: str, num_results: int) -> List[float]:
         """
@@ -239,23 +226,10 @@ Score each document (1-10) for relevance to the query. Return JSON array:"""
 
 
 # =============================================================================
-# SINGLETON
+# SINGLETON ACCESS (delegates to ServiceContainer)
 # =============================================================================
 
-_reranker_service: Optional[RerankerService] = None
-
-
 def get_reranker_service() -> RerankerService:
-    """Get Re-ranker service singleton"""
-    global _reranker_service
-    if _reranker_service is None:
-        _reranker_service = RerankerService()
-    return _reranker_service
-
-
-async def shutdown_reranker_service() -> None:
-    """Shutdown Re-ranker service"""
-    global _reranker_service
-    if _reranker_service:
-        await _reranker_service.close()
-        _reranker_service = None
+    """Get RerankerService via the global ServiceContainer"""
+    from app.core.container import get_container
+    return get_container().reranker
