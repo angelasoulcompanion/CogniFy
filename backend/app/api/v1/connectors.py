@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from app.core.security import get_current_user, TokenPayload
 from app.services.connector_service import get_connector_service
 from app.domain.entities.connector import DatabaseType, SyncStatus
+from app.api.helpers import get_or_404, check_owner_or_admin, validate_enum
 
 
 router = APIRouter(prefix="/connectors", tags=["connectors"])
@@ -110,6 +111,39 @@ class SyncResponse(BaseModel):
 
 
 # =============================================================================
+# HELPERS
+# =============================================================================
+
+def _connection_to_response(connection) -> ConnectionResponse:
+    """Convert connection entity to response model"""
+    return ConnectionResponse(
+        connection_id=str(connection.connection_id),
+        name=connection.name,
+        db_type=connection.db_type.value,
+        host=connection.host,
+        port=connection.port,
+        database_name=connection.database_name,
+        username=connection.username,
+        sync_enabled=connection.sync_enabled,
+        last_sync_at=connection.last_sync_at.isoformat() if connection.last_sync_at else None,
+        last_sync_status=connection.last_sync_status.value if connection.last_sync_status else None,
+        last_sync_error=connection.last_sync_error,
+        total_chunks_synced=connection.total_chunks_synced,
+        is_active=connection.is_active,
+        created_at=connection.created_at.isoformat(),
+        updated_at=connection.updated_at.isoformat(),
+    )
+
+
+async def _get_owned_connection(connection_id: UUID, current_user: TokenPayload):
+    """Fetch a connection and verify ownership (or admin)."""
+    service = get_connector_service()
+    connection = await get_or_404(service.get_connection, connection_id, "Connection")
+    check_owner_or_admin(connection.created_by, current_user)
+    return connection
+
+
+# =============================================================================
 # ENDPOINTS
 # =============================================================================
 
@@ -119,34 +153,21 @@ async def create_connection(
     current_user: TokenPayload = Depends(get_current_user),
 ):
     """Create a new database connection"""
-    try:
-        # Validate db_type
-        try:
-            DatabaseType(request.db_type)
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid database type. Must be one of: postgresql, mysql, sqlserver"
-            )
+    validate_enum(request.db_type, DatabaseType, "database type")
 
-        service = get_connector_service()
-        connection = await service.create_connection(
-            name=request.name,
-            db_type=request.db_type,
-            host=request.host,
-            port=request.port,
-            database_name=request.database_name,
-            username=request.username,
-            password=request.password,
-            created_by=UUID(current_user.sub),
-        )
+    service = get_connector_service()
+    connection = await service.create_connection(
+        name=request.name,
+        db_type=request.db_type,
+        host=request.host,
+        port=request.port,
+        database_name=request.database_name,
+        username=request.username,
+        password=request.password,
+        created_by=UUID(current_user.sub),
+    )
 
-        return _connection_to_response(connection)
-
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    return _connection_to_response(connection)
 
 
 @router.get("", response_model=List[ConnectionResponse])
@@ -171,16 +192,7 @@ async def get_connection(
     current_user: TokenPayload = Depends(get_current_user),
 ):
     """Get a specific database connection"""
-    service = get_connector_service()
-    connection = await service.get_connection(connection_id)
-
-    if not connection:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Connection not found")
-
-    # Check ownership (admin can see all)
-    if current_user.role != "admin" and str(connection.created_by) != current_user.sub:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-
+    connection = await _get_owned_connection(connection_id, current_user)
     return _connection_to_response(connection)
 
 
@@ -191,16 +203,9 @@ async def update_connection(
     current_user: TokenPayload = Depends(get_current_user),
 ):
     """Update a database connection"""
+    await _get_owned_connection(connection_id, current_user)
+
     service = get_connector_service()
-    connection = await service.get_connection(connection_id)
-
-    if not connection:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Connection not found")
-
-    # Check ownership
-    if current_user.role != "admin" and str(connection.created_by) != current_user.sub:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-
     updated = await service.update_connection(
         connection_id=connection_id,
         name=request.name,
@@ -221,16 +226,9 @@ async def delete_connection(
     current_user: TokenPayload = Depends(get_current_user),
 ):
     """Delete (deactivate) a database connection"""
+    await _get_owned_connection(connection_id, current_user)
+
     service = get_connector_service()
-    connection = await service.get_connection(connection_id)
-
-    if not connection:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Connection not found")
-
-    # Check ownership
-    if current_user.role != "admin" and str(connection.created_by) != current_user.sub:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-
     await service.delete_connection(connection_id)
 
 
@@ -262,10 +260,7 @@ async def test_existing_connection(
 ):
     """Test an existing connection"""
     service = get_connector_service()
-    connection = await service.get_connection(connection_id)
-
-    if not connection:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Connection not found")
+    await get_or_404(service.get_connection, connection_id, "Connection")
 
     success, error = await service.test_connection(connection_id)
     return TestConnectionResponse(success=success, error=error)
@@ -277,21 +272,11 @@ async def discover_schema(
     current_user: TokenPayload = Depends(get_current_user),
 ):
     """Discover database schema (tables and columns)"""
+    await _get_owned_connection(connection_id, current_user)
+
     service = get_connector_service()
-    connection = await service.get_connection(connection_id)
-
-    if not connection:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Connection not found")
-
-    # Check ownership
-    if current_user.role != "admin" and str(connection.created_by) != current_user.sub:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-
-    try:
-        tables = await service.discover_schema(connection_id)
-        return [TableInfoResponse(**t.to_dict()) for t in tables]
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    tables = await service.discover_schema(connection_id)
+    return [TableInfoResponse(**t.to_dict()) for t in tables]
 
 
 @router.post("/{connection_id}/sync", response_model=SyncResponse)
@@ -305,17 +290,9 @@ async def sync_connection(
     Sync database data to document chunks for RAG.
     Runs in background for large datasets.
     """
+    await _get_owned_connection(connection_id, current_user)
+
     service = get_connector_service()
-    connection = await service.get_connection(connection_id)
-
-    if not connection:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Connection not found")
-
-    # Check ownership
-    if current_user.role != "admin" and str(connection.created_by) != current_user.sub:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-
-    # Run sync
     chunks_created, error = await service.sync_to_chunks(
         connection_id=connection_id,
         tables=request.tables,
@@ -338,21 +315,11 @@ async def preview_table_data(
     current_user: TokenPayload = Depends(get_current_user),
 ):
     """Preview data from a table"""
+    await _get_owned_connection(connection_id, current_user)
+
     service = get_connector_service()
-    connection = await service.get_connection(connection_id)
-
-    if not connection:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Connection not found")
-
-    # Check ownership
-    if current_user.role != "admin" and str(connection.created_by) != current_user.sub:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-
-    try:
-        data = await service.preview_data(connection_id, table_name, limit=min(limit, 100))
-        return {"table_name": table_name, "data": data, "count": len(data)}
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    data = await service.preview_data(connection_id, table_name, limit=min(limit, 100))
+    return {"table_name": table_name, "data": data, "count": len(data)}
 
 
 @router.post("/{connection_id}/query")
@@ -362,45 +329,8 @@ async def execute_query(
     current_user: TokenPayload = Depends(get_current_user),
 ):
     """Execute a custom SELECT query"""
+    await _get_owned_connection(connection_id, current_user)
+
     service = get_connector_service()
-    connection = await service.get_connection(connection_id)
-
-    if not connection:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Connection not found")
-
-    # Check ownership
-    if current_user.role != "admin" and str(connection.created_by) != current_user.sub:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-
-    try:
-        data = await service.execute_query(connection_id, request.query)
-        return {"query": request.query, "data": data, "count": len(data)}
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-
-
-# =============================================================================
-# HELPERS
-# =============================================================================
-
-def _connection_to_response(connection) -> ConnectionResponse:
-    """Convert connection entity to response model"""
-    return ConnectionResponse(
-        connection_id=str(connection.connection_id),
-        name=connection.name,
-        db_type=connection.db_type.value,
-        host=connection.host,
-        port=connection.port,
-        database_name=connection.database_name,
-        username=connection.username,
-        sync_enabled=connection.sync_enabled,
-        last_sync_at=connection.last_sync_at.isoformat() if connection.last_sync_at else None,
-        last_sync_status=connection.last_sync_status.value if connection.last_sync_status else None,
-        last_sync_error=connection.last_sync_error,
-        total_chunks_synced=connection.total_chunks_synced,
-        is_active=connection.is_active,
-        created_at=connection.created_at.isoformat(),
-        updated_at=connection.updated_at.isoformat(),
-    )
+    data = await service.execute_query(connection_id, request.query)
+    return {"query": request.query, "data": data, "count": len(data)}

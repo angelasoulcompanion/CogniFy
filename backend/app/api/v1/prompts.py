@@ -7,12 +7,14 @@ Created with love by Angela & David - 2 January 2026
 
 from typing import Optional, List, Dict, Any
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from app.core.security import get_current_user, require_admin, TokenPayload
+from app.core.exceptions import NotFoundError, ValidationError
 from app.services.prompt_service import get_prompt_service, PromptService
 from app.domain.entities.prompt import PromptCategory, ExpertRole
+from app.api.helpers import get_or_404, validate_enum
 
 
 router = APIRouter(prefix="/prompts", tags=["prompts"])
@@ -116,6 +118,17 @@ def prompt_to_response(prompt) -> PromptResponse:
     return PromptResponse(**data)
 
 
+def _validate_prompt_enums(
+    category: Optional[str] = None,
+    expert_role: Optional[str] = None,
+) -> None:
+    """Validate category and expert_role enum values if provided."""
+    if category:
+        validate_enum(category, PromptCategory, "category")
+    if expert_role:
+        validate_enum(expert_role, ExpertRole, "expert_role")
+
+
 # =============================================================================
 # ENDPOINTS
 # =============================================================================
@@ -208,10 +221,7 @@ async def get_prompt(
     Get prompt by ID.
     Admin only.
     """
-    prompt = await prompt_service.get_prompt_by_id(template_id)
-    if not prompt:
-        raise HTTPException(status_code=404, detail="Prompt not found")
-
+    prompt = await get_or_404(prompt_service.get_prompt_by_id, template_id, "Prompt")
     return prompt_to_response(prompt)
 
 
@@ -225,24 +235,7 @@ async def create_prompt(
     Create new prompt template.
     Admin only.
     """
-    # Validate category
-    try:
-        PromptCategory(request.category)
-    except ValueError:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid category: {request.category}. Valid: {[c.value for c in PromptCategory]}"
-        )
-
-    # Validate expert role if provided
-    if request.expert_role:
-        try:
-            ExpertRole(request.expert_role)
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid expert_role: {request.expert_role}. Valid: {[r.value for r in ExpertRole]}"
-            )
+    _validate_prompt_enums(request.category, request.expert_role)
 
     prompt = await prompt_service.create_prompt(
         name=request.name,
@@ -272,25 +265,7 @@ async def update_prompt(
     Update prompt template.
     Admin only.
     """
-    # Validate category if provided
-    if request.category:
-        try:
-            PromptCategory(request.category)
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid category: {request.category}"
-            )
-
-    # Validate expert role if provided
-    if request.expert_role:
-        try:
-            ExpertRole(request.expert_role)
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid expert_role: {request.expert_role}"
-            )
+    _validate_prompt_enums(request.category, request.expert_role)
 
     # Build updates dict
     updates = {}
@@ -303,7 +278,7 @@ async def update_prompt(
 
     prompt = await prompt_service.update_prompt(template_id, **updates)
     if not prompt:
-        raise HTTPException(status_code=404, detail="Prompt not found")
+        raise NotFoundError("Prompt not found")
 
     return prompt_to_response(prompt)
 
@@ -320,7 +295,7 @@ async def delete_prompt(
     """
     success = await prompt_service.delete_prompt(template_id)
     if not success:
-        raise HTTPException(status_code=404, detail="Prompt not found")
+        raise NotFoundError("Prompt not found")
 
     return {"message": "Prompt deleted successfully"}
 
@@ -335,9 +310,7 @@ async def set_default_prompt(
     Set prompt as default for its category.
     Admin only.
     """
-    prompt = await prompt_service.get_prompt_by_id(template_id)
-    if not prompt:
-        raise HTTPException(status_code=404, detail="Prompt not found")
+    prompt = await get_or_404(prompt_service.get_prompt_by_id, template_id, "Prompt")
 
     success = await prompt_service.set_default(
         template_id,
@@ -346,7 +319,7 @@ async def set_default_prompt(
     )
 
     if not success:
-        raise HTTPException(status_code=500, detail="Failed to set default")
+        raise ValidationError("Failed to set default")
 
     return {"message": "Prompt set as default successfully"}
 
@@ -361,14 +334,7 @@ async def ai_generate_prompt(
     Use AI to generate a prompt template based on description.
     Admin only.
     """
-    # Validate category
-    try:
-        PromptCategory(request.category)
-    except ValueError:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid category: {request.category}"
-        )
+    validate_enum(request.category, PromptCategory, "category")
 
     result = await prompt_service.ai_generate_prompt(
         category=request.category,
@@ -395,4 +361,4 @@ async def render_prompt(
         rendered = await prompt_service.render_prompt(template_id, variables)
         return {"rendered": rendered}
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ValidationError(str(e))

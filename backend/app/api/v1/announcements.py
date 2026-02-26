@@ -8,11 +8,13 @@ from typing import Optional, List
 from uuid import UUID
 
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, Query, status
 
-from app.core.security import get_current_user, get_current_user_optional, TokenPayload, require_admin
+from app.core.security import get_current_user_optional, TokenPayload, require_admin
+from app.core.exceptions import NotFoundError
 from app.infrastructure.repositories.announcement_repository import AnnouncementRepository
 from app.domain.entities.announcement import Announcement, AnnouncementCategory
+from app.api.helpers import get_or_404, validate_enum, PaginationParams
 
 
 router = APIRouter()
@@ -87,14 +89,26 @@ def _announcement_to_response(announcement: Announcement) -> AnnouncementRespons
     )
 
 
+async def _get_announcement(announcement_id: UUID) -> Announcement:
+    """Fetch an announcement or raise 404"""
+    return await get_or_404(announcement_repo.get_by_id, announcement_id, "Announcement")
+
+
+async def _get_announcement_action(repo_action, announcement_id: UUID) -> Announcement:
+    """Call a repo action (publish/unpublish/pin/unpin) and raise 404 if not found"""
+    result = await repo_action(announcement_id)
+    if not result:
+        raise NotFoundError("Announcement not found")
+    return result
+
+
 # =============================================================================
 # PUBLIC ENDPOINTS (Authenticated users)
 # =============================================================================
 
 @router.get("", response_model=AnnouncementListResponse)
 async def list_published_announcements(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
+    pagination: PaginationParams = Depends(),
     category: Optional[str] = Query(None),
     current_user: Optional[TokenPayload] = Depends(get_current_user_optional),
 ):
@@ -104,8 +118,8 @@ async def list_published_announcements(
     """
     cat_enum = AnnouncementCategory(category) if category else None
     announcements = await announcement_repo.get_published(
-        skip=skip,
-        limit=limit,
+        skip=pagination.skip,
+        limit=pagination.limit,
         category=cat_enum,
     )
     total = await announcement_repo.count_published()
@@ -113,8 +127,8 @@ async def list_published_announcements(
     return AnnouncementListResponse(
         announcements=[_announcement_to_response(a) for a in announcements],
         total=total,
-        skip=skip,
-        limit=limit,
+        skip=pagination.skip,
+        limit=pagination.limit,
     )
 
 
@@ -134,20 +148,12 @@ async def get_announcement(
     current_user: Optional[TokenPayload] = Depends(get_current_user_optional),
 ):
     """Get a specific announcement by ID"""
-    announcement = await announcement_repo.get_by_id(announcement_id)
-    if not announcement:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Announcement not found"
-        )
+    announcement = await _get_announcement(announcement_id)
 
     # Only return published announcements for non-admin users
     if not announcement.is_published:
         if not current_user or current_user.role != "admin":
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Announcement not found"
-            )
+            raise NotFoundError("Announcement not found")
 
     return _announcement_to_response(announcement)
 
@@ -186,13 +192,7 @@ async def create_announcement(
     current_user: TokenPayload = Depends(require_admin),
 ):
     """Create a new announcement (Admin only)"""
-    try:
-        category_enum = AnnouncementCategory(request.category)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid category: {request.category}. Valid values: general, important, update, event"
-        )
+    category_enum = validate_enum(request.category, AnnouncementCategory, "category")
 
     announcement = Announcement.create(
         title=request.title,
@@ -218,22 +218,11 @@ async def update_announcement(
     current_user: TokenPayload = Depends(require_admin),
 ):
     """Update an existing announcement (Admin only)"""
-    announcement = await announcement_repo.get_by_id(announcement_id)
-    if not announcement:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Announcement not found"
-        )
+    announcement = await _get_announcement(announcement_id)
 
     category_enum = None
     if request.category:
-        try:
-            category_enum = AnnouncementCategory(request.category)
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid category: {request.category}"
-            )
+        category_enum = validate_enum(request.category, AnnouncementCategory, "category")
 
     announcement.update(
         title=request.title,
@@ -254,10 +243,7 @@ async def delete_announcement(
     """Delete an announcement (Admin only)"""
     deleted = await announcement_repo.delete(announcement_id)
     if not deleted:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Announcement not found"
-        )
+        raise NotFoundError("Announcement not found")
 
 
 @router.post("/{announcement_id}/publish", response_model=AnnouncementResponse)
@@ -266,12 +252,7 @@ async def publish_announcement(
     current_user: TokenPayload = Depends(require_admin),
 ):
     """Publish an announcement (Admin only)"""
-    announcement = await announcement_repo.publish(announcement_id)
-    if not announcement:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Announcement not found"
-        )
+    announcement = await _get_announcement_action(announcement_repo.publish, announcement_id)
     return _announcement_to_response(announcement)
 
 
@@ -281,12 +262,7 @@ async def unpublish_announcement(
     current_user: TokenPayload = Depends(require_admin),
 ):
     """Unpublish an announcement (Admin only)"""
-    announcement = await announcement_repo.unpublish(announcement_id)
-    if not announcement:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Announcement not found"
-        )
+    announcement = await _get_announcement_action(announcement_repo.unpublish, announcement_id)
     return _announcement_to_response(announcement)
 
 
@@ -296,12 +272,7 @@ async def pin_announcement(
     current_user: TokenPayload = Depends(require_admin),
 ):
     """Pin an announcement to top (Admin only)"""
-    announcement = await announcement_repo.pin(announcement_id)
-    if not announcement:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Announcement not found"
-        )
+    announcement = await _get_announcement_action(announcement_repo.pin, announcement_id)
     return _announcement_to_response(announcement)
 
 
@@ -311,10 +282,5 @@ async def unpin_announcement(
     current_user: TokenPayload = Depends(require_admin),
 ):
     """Unpin an announcement (Admin only)"""
-    announcement = await announcement_repo.unpin(announcement_id)
-    if not announcement:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Announcement not found"
-        )
+    announcement = await _get_announcement_action(announcement_repo.unpin, announcement_id)
     return _announcement_to_response(announcement)

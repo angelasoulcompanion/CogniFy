@@ -15,6 +15,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.core.security import get_current_user, get_current_user_optional, TokenPayload
+from app.core.exceptions import NotFoundError, ValidationError
 from app.services.rag_service import (
     get_rag_service,
     RAGSettings,
@@ -22,6 +23,7 @@ from app.services.rag_service import (
     SimilarityMethod,
 )
 from app.infrastructure.repositories.embedding_repository import get_embedding_repository
+from app.api.helpers import rag_result_to_dict
 
 
 router = APIRouter()
@@ -105,6 +107,47 @@ class ContextResponse(BaseModel):
 
 
 # =============================================================================
+# HELPERS
+# =============================================================================
+
+def _parse_search_params(body) -> tuple:
+    """Extract common search parameters: doc_ids, user_id from request body + user."""
+    doc_ids = [UUID(d) for d in body.document_ids] if body.document_ids else None
+    return doc_ids
+
+
+def _build_search_response(
+    query: str,
+    results: list,
+    start_time: float,
+    method: str,
+    *,
+    include_content: bool = True,
+    content_truncate: Optional[int] = None,
+) -> SearchResponse:
+    """Build a SearchResponse from RAG results, eliminating repeated boilerplate."""
+    search_time_ms = int((time.time() - start_time) * 1000)
+    return SearchResponse(
+        query=query,
+        results=[
+            SearchResult(**rag_result_to_dict(
+                r,
+                include_content=include_content,
+                content_truncate=content_truncate,
+            ))
+            for r in results
+        ],
+        total=len(results),
+        search_time_ms=search_time_ms,
+        search_method=method,
+    )
+
+
+def _get_user_id(current_user: Optional[TokenPayload]) -> Optional[UUID]:
+    return UUID(current_user.sub) if current_user else None
+
+
+# =============================================================================
 # ENDPOINTS
 # =============================================================================
 
@@ -124,7 +167,6 @@ async def semantic_search(
 
     rag_service = get_rag_service()
 
-    # Build settings
     settings = RAGSettings(
         search_method=SearchMethod.VECTOR,
         similarity_method=SimilarityMethod(body.similarity_method),
@@ -132,42 +174,16 @@ async def semantic_search(
         max_chunks=body.limit,
     )
 
-    # Parse document IDs if provided
-    doc_ids = None
-    if body.document_ids:
-        doc_ids = [UUID(d) for d in body.document_ids]
-
-    # Get user ID if authenticated
-    user_id = UUID(current_user.sub) if current_user else None
-
-    # Perform search
     results = await rag_service.search(
         query=body.query,
         settings=settings,
-        user_id=user_id,
-        document_ids=doc_ids,
+        user_id=_get_user_id(current_user),
+        document_ids=_parse_search_params(body),
     )
 
-    search_time_ms = int((time.time() - start_time) * 1000)
-
-    return SearchResponse(
-        query=body.query,
-        results=[
-            SearchResult(
-                chunk_id=str(r.chunk_id),
-                document_id=str(r.document_id),
-                document_name=r.document_title or r.document_filename or "Untitled",
-                content=r.content if body.include_content else "",
-                page_number=r.page_number,
-                section_title=r.section_title,
-                similarity=r.score,
-                vector_rank=r.vector_rank,
-            )
-            for r in results
-        ],
-        total=len(results),
-        search_time_ms=search_time_ms,
-        search_method="vector",
+    return _build_search_response(
+        body.query, results, start_time, "vector",
+        include_content=body.include_content,
     )
 
 
@@ -187,7 +203,6 @@ async def hybrid_search(
 
     rag_service = get_rag_service()
 
-    # Build settings
     settings = RAGSettings(
         search_method=SearchMethod.HYBRID,
         similarity_threshold=body.threshold,
@@ -197,41 +212,14 @@ async def hybrid_search(
         rrf_k=body.rrf_k,
     )
 
-    # Parse document IDs
-    doc_ids = [UUID(d) for d in body.document_ids] if body.document_ids else None
-    user_id = UUID(current_user.sub) if current_user else None
-
-    # Perform search
     results = await rag_service.search(
         query=body.query,
         settings=settings,
-        user_id=user_id,
-        document_ids=doc_ids,
+        user_id=_get_user_id(current_user),
+        document_ids=_parse_search_params(body),
     )
 
-    search_time_ms = int((time.time() - start_time) * 1000)
-
-    return SearchResponse(
-        query=body.query,
-        results=[
-            SearchResult(
-                chunk_id=str(r.chunk_id),
-                document_id=str(r.document_id),
-                document_name=r.document_title or r.document_filename or "Untitled",
-                content=r.content,
-                page_number=r.page_number,
-                section_title=r.section_title,
-                similarity=r.score,
-                vector_rank=r.vector_rank,
-                bm25_rank=r.bm25_rank,
-                rrf_score=r.rrf_score,
-            )
-            for r in results
-        ],
-        total=len(results),
-        search_time_ms=search_time_ms,
-        search_method="hybrid",
-    )
+    return _build_search_response(body.query, results, start_time, "hybrid")
 
 
 @router.post("/bm25", response_model=SearchResponse)
@@ -255,37 +243,14 @@ async def bm25_search(
         max_chunks=body.limit,
     )
 
-    doc_ids = [UUID(d) for d in body.document_ids] if body.document_ids else None
-    user_id = UUID(current_user.sub) if current_user else None
-
     results = await rag_service.search(
         query=body.query,
         settings=settings,
-        user_id=user_id,
-        document_ids=doc_ids,
+        user_id=_get_user_id(current_user),
+        document_ids=_parse_search_params(body),
     )
 
-    search_time_ms = int((time.time() - start_time) * 1000)
-
-    return SearchResponse(
-        query=body.query,
-        results=[
-            SearchResult(
-                chunk_id=str(r.chunk_id),
-                document_id=str(r.document_id),
-                document_name=r.document_title or r.document_filename or "Untitled",
-                content=r.content,
-                page_number=r.page_number,
-                section_title=r.section_title,
-                similarity=r.score,
-                bm25_rank=r.bm25_rank,
-            )
-            for r in results
-        ],
-        total=len(results),
-        search_time_ms=search_time_ms,
-        search_method="bm25",
-    )
+    return _build_search_response(body.query, results, start_time, "bm25")
 
 
 @router.post("/context", response_model=ContextResponse)
@@ -300,8 +265,6 @@ async def build_rag_context(
 
     Returns formatted context string with source citations.
     """
-    start_time = time.time()
-
     rag_service = get_rag_service()
 
     settings = RAGSettings(
@@ -310,14 +273,11 @@ async def build_rag_context(
         max_chunks=body.max_chunks,
     )
 
-    doc_ids = [UUID(d) for d in body.document_ids] if body.document_ids else None
-    user_id = UUID(current_user.sub) if current_user else None
-
     context, results = await rag_service.build_context(
         query=body.query,
         settings=settings,
-        user_id=user_id,
-        document_ids=doc_ids,
+        user_id=_get_user_id(current_user),
+        document_ids=_parse_search_params(body),
         max_context_length=body.max_context_length,
     )
 
@@ -325,15 +285,7 @@ async def build_rag_context(
         query=body.query,
         context=context,
         sources=[
-            SearchResult(
-                chunk_id=str(r.chunk_id),
-                document_id=str(r.document_id),
-                document_name=r.document_title or r.document_filename or "Untitled",
-                content=r.content[:200] + "..." if len(r.content) > 200 else r.content,
-                page_number=r.page_number,
-                section_title=r.section_title,
-                similarity=r.score,
-            )
+            SearchResult(**rag_result_to_dict(r, content_truncate=200))
             for r in results
         ],
         total_sources=len(results),
@@ -368,16 +320,10 @@ async def find_similar_chunks(
     )
 
     if not row:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Chunk not found"
-        )
+        raise NotFoundError("Chunk not found")
 
     if not row["embedding"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Chunk has no embedding"
-        )
+        raise ValidationError("Chunk has no embedding")
 
     # Parse embedding
     embedding_str = row["embedding"].strip("[]")

@@ -8,11 +8,13 @@ from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 
-from app.core.security import get_current_user, require_admin, TokenPayload
+from app.core.security import require_admin, TokenPayload
+from app.core.exceptions import NotFoundError, ValidationError
 from app.services.admin_service import get_admin_service
+from app.api.helpers import PaginationParams
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -119,13 +121,6 @@ async def get_system_stats(
     Get system-wide statistics.
 
     **Requires admin role.**
-
-    Returns:
-    - User counts (total, active)
-    - Document and chunk counts
-    - Conversation and message counts
-    - Storage usage
-    - Average response time
     """
     admin_service = get_admin_service()
     stats = await admin_service.get_system_stats()
@@ -158,11 +153,6 @@ async def list_users(
     Get all users with their statistics.
 
     **Requires admin role.**
-
-    Returns paginated list of users with:
-    - Document, conversation, message counts
-    - Last active timestamp
-    - Account status
     """
     admin_service = get_admin_service()
 
@@ -209,16 +199,6 @@ async def get_usage_metrics(
     Get usage metrics over time.
 
     **Requires admin role.**
-
-    Args:
-    - days: Number of days to look back (1-365)
-    - interval: Grouping interval (day, week, month)
-
-    Returns metrics per interval:
-    - Documents uploaded
-    - Messages sent
-    - Embeddings created
-    - Unique active users
     """
     admin_service = get_admin_service()
     metrics = await admin_service.get_usage_metrics(days=days, interval=interval)
@@ -247,11 +227,6 @@ async def get_document_type_stats(
     Get statistics grouped by document type.
 
     **Requires admin role.**
-
-    Returns for each file type:
-    - Document count
-    - Total size in MB
-    - Total chunks
     """
     admin_service = get_admin_service()
     stats = await admin_service.get_document_type_stats()
@@ -280,11 +255,6 @@ async def get_top_users(
     Get top users by activity.
 
     **Requires admin role.**
-
-    Returns users sorted by message count with:
-    - Conversation count
-    - Message count
-    - Document count
     """
     admin_service = get_admin_service()
     users = await admin_service.get_top_users(limit=limit)
@@ -315,8 +285,6 @@ async def get_recent_activity(
     Get recent system activity.
 
     **Requires admin role.**
-
-    Returns recent documents and conversations.
     """
     admin_service = get_admin_service()
     activity = await admin_service.get_recent_activity(limit=limit)
@@ -351,19 +319,16 @@ async def update_user_role(
     Valid roles: admin, editor, user
     """
     if str(user_id) == current_user.sub:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot change your own role",
-        )
+        raise ValidationError("Cannot change your own role")
 
     admin_service = get_admin_service()
 
     try:
         success = await admin_service.update_user_role(user_id, request.role)
         if not success:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise NotFoundError("User not found")
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise ValidationError(str(e))
 
     return MessageResponse(
         success=True,
@@ -388,16 +353,13 @@ async def toggle_user_status(
     Cannot deactivate yourself.
     """
     if str(user_id) == current_user.sub:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot deactivate your own account",
-        )
+        raise ValidationError("Cannot deactivate your own account")
 
     admin_service = get_admin_service()
     success = await admin_service.toggle_user_status(user_id)
 
     if not success:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise NotFoundError("User not found")
 
     return MessageResponse(
         success=True,

@@ -7,16 +7,17 @@ from typing import Optional, List
 from uuid import UUID
 import os
 import aiofiles
-from datetime import datetime
 
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, BackgroundTasks
 
 from app.core.config import settings
+from app.core.exceptions import ConflictError
 from app.core.security import get_current_user, get_current_user_optional, TokenPayload
 from app.infrastructure.repositories.document_repository import DocumentRepository, DocumentChunkRepository
 from app.domain.entities.document import Document, ProcessingStatus
 from app.services.document_service import process_document_background, get_document_service
+from app.api.helpers import get_active_or_404, PaginationParams
 
 
 router = APIRouter()
@@ -101,23 +102,27 @@ def _document_to_response(doc: Document) -> DocumentResponse:
     )
 
 
+async def _get_document(document_id: UUID) -> Document:
+    """Fetch an active document or raise 404"""
+    return await get_active_or_404(document_repo.get_by_id, document_id, "Document")
+
+
 @router.get("", response_model=DocumentListResponse)
 async def list_documents(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
+    pagination: PaginationParams = Depends(),
     current_user: Optional[TokenPayload] = Depends(get_current_user_optional)
 ):
     """
     List all documents with pagination.
     """
-    documents = await document_repo.get_all_active(skip=skip, limit=limit)
+    documents = await document_repo.get_all_active(skip=pagination.skip, limit=pagination.limit)
     total = await document_repo.count()
 
     return DocumentListResponse(
         documents=[_document_to_response(doc) for doc in documents],
         total=total,
-        skip=skip,
-        limit=limit,
+        skip=pagination.skip,
+        limit=pagination.limit,
     )
 
 
@@ -129,14 +134,7 @@ async def get_document(
     """
     Get document by ID.
     """
-    document = await document_repo.get_by_id(document_id)
-
-    if document is None or document.is_deleted:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found"
-        )
-
+    document = await _get_document(document_id)
     return _document_to_response(document)
 
 
@@ -214,17 +212,8 @@ async def delete_document(
     """
     Delete a document (soft delete).
     """
-    document = await document_repo.get_by_id(document_id)
-
-    if document is None or document.is_deleted:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found"
-        )
-
-    # Soft delete
+    await _get_document(document_id)
     await document_repo.soft_delete(document_id)
-
     return None
 
 
@@ -236,14 +225,7 @@ async def get_document_chunks(
     """
     Get all chunks for a document.
     """
-    document = await document_repo.get_by_id(document_id)
-
-    if document is None or document.is_deleted:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found"
-        )
-
+    await _get_document(document_id)
     chunks = await chunk_repo.get_by_document(document_id)
 
     return [
@@ -268,13 +250,7 @@ async def reprocess_document(
     """
     Reprocess a document (delete chunks and re-extract).
     """
-    document = await document_repo.get_by_id(document_id)
-
-    if document is None or document.is_deleted:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found"
-        )
+    await _get_document(document_id)
 
     # Delete existing chunks
     await chunk_repo.delete_by_document(document_id)
@@ -302,13 +278,7 @@ async def update_document(
     """
     Update document metadata.
     """
-    document = await document_repo.get_by_id(document_id)
-
-    if document is None or document.is_deleted:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found"
-        )
+    document = await _get_document(document_id)
 
     if title is not None:
         document.title = title
@@ -330,22 +300,9 @@ async def get_document_stats(
     """
     Get document processing statistics.
     """
-    document = await document_repo.get_by_id(document_id)
-
-    if document is None or document.is_deleted:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found"
-        )
-
-    try:
-        stats = await document_service.get_document_stats(document_id)
-        return stats
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+    await _get_document(document_id)
+    stats = await document_service.get_document_stats(document_id)
+    return stats
 
 
 @router.post("/{document_id}/process")
@@ -357,19 +314,10 @@ async def process_document_now(
     """
     Trigger document processing immediately.
     """
-    document = await document_repo.get_by_id(document_id)
-
-    if document is None or document.is_deleted:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found"
-        )
+    document = await _get_document(document_id)
 
     if document.processing_status == ProcessingStatus.PROCESSING:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Document is already being processed"
-        )
+        raise ConflictError("Document is already being processed")
 
     # Add background task
     background_tasks.add_task(process_document_background, document_id)
