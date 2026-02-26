@@ -50,11 +50,11 @@ import {
   EyeOff,
   Pin,
   PinOff,
-  X,
-  AlertCircle,
-  Info,
-  PartyPopper,
 } from 'lucide-react'
+import { CATEGORY_OPTIONS } from '@/lib/announcementConfig'
+import { Modal } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
 
 // =============================================================================
 // STAT CARD COMPONENT
@@ -366,13 +366,6 @@ function TopUsersList() {
 // NEWS MANAGEMENT COMPONENT
 // =============================================================================
 
-const CATEGORY_OPTIONS: { value: AnnouncementCategory; label: string; icon: React.ElementType; color: string }[] = [
-  { value: 'general', label: 'General', icon: Info, color: 'text-blue-400' },
-  { value: 'important', label: 'Important', icon: AlertCircle, color: 'text-red-400' },
-  { value: 'update', label: 'Update', icon: RefreshCw, color: 'text-green-400' },
-  { value: 'event', label: 'Event', icon: PartyPopper, color: 'text-yellow-400' },
-]
-
 function AnnouncementModal({
   announcement,
   onClose,
@@ -404,38 +397,20 @@ function AnnouncementModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-2xl bg-secondary-800 rounded-2xl border border-secondary-700 shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-secondary-700">
-          <h2 className="text-lg font-semibold text-white">
-            {announcement ? 'Edit Announcement' : 'Create Announcement'}
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg text-secondary-400 hover:bg-secondary-700 hover:text-white"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-          {/* Title */}
+    <Modal isOpen onClose={onClose} size="lg">
+      <Modal.Header title={announcement ? 'Edit Announcement' : 'Create Announcement'} />
+      <Modal.Content scrollable maxHeight="max-h-[70vh]">
+        <form id="announcement-form" onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-secondary-300 mb-2">Title</label>
-            <input
-              type="text"
+            <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
-              className="w-full px-4 py-2 rounded-lg bg-secondary-700 border border-secondary-600 text-white placeholder-secondary-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none"
               placeholder="Announcement title..."
             />
           </div>
 
-          {/* Category */}
           <div>
             <label className="block text-sm font-medium text-secondary-300 mb-2">Category</label>
             <div className="grid grid-cols-4 gap-2">
@@ -461,21 +436,18 @@ function AnnouncementModal({
             </div>
           </div>
 
-          {/* Cover Image URL */}
           <div>
             <label className="block text-sm font-medium text-secondary-300 mb-2">
               Cover Image URL <span className="text-secondary-500">(optional)</span>
             </label>
-            <input
+            <Input
               type="url"
               value={coverImageUrl}
               onChange={(e) => setCoverImageUrl(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg bg-secondary-700 border border-secondary-600 text-white placeholder-secondary-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none"
               placeholder="https://example.com/image.jpg"
             />
           </div>
 
-          {/* Content */}
           <div>
             <label className="block text-sm font-medium text-secondary-300 mb-2">
               Content <span className="text-secondary-500">(Markdown supported)</span>
@@ -490,7 +462,6 @@ function AnnouncementModal({
             />
           </div>
 
-          {/* Options */}
           <div className="flex gap-6">
             <label className="flex items-center gap-2 text-sm text-secondary-300">
               <input
@@ -512,26 +483,19 @@ function AnnouncementModal({
             </label>
           </div>
         </form>
-
-        {/* Footer */}
-        <div className="flex justify-end gap-3 p-4 border-t border-secondary-700">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-secondary-300 hover:text-white transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={isSaving || !title || !content}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isSaving ? 'Saving...' : announcement ? 'Update' : 'Create'}
-          </button>
-        </div>
-      </div>
-    </div>
+      </Modal.Content>
+      <Modal.Footer>
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button
+          onClick={handleSubmit}
+          disabled={isSaving || !title || !content}
+          isLoading={isSaving}
+          loadingText="Saving..."
+        >
+          {announcement ? 'Update' : 'Create'}
+        </Button>
+      </Modal.Footer>
+    </Modal>
   )
 }
 
@@ -756,6 +720,13 @@ export function AdminPage() {
     toggleStatus.mutate(userId)
   }
 
+  const tabClass = (tab: string) => cn(
+    'pb-3 px-1 text-sm font-medium border-b-2 transition-colors',
+    activeTab === tab
+      ? 'border-primary-500 text-primary-400'
+      : 'border-transparent text-secondary-400 hover:text-secondary-200'
+  )
+
   return (
     <div className="min-h-screen bg-secondary-950 p-6">
       <div className="max-w-7xl mx-auto">
@@ -779,36 +750,21 @@ export function AdminPage() {
           <div className="flex gap-4">
             <button
               onClick={() => setActiveTab('overview')}
-              className={cn(
-                'pb-3 px-1 text-sm font-medium border-b-2 transition-colors',
-                activeTab === 'overview'
-                  ? 'border-primary-500 text-primary-400'
-                  : 'border-transparent text-secondary-400 hover:text-secondary-200'
-              )}
+              className={tabClass('overview')}
             >
               <Activity className="inline h-4 w-4 mr-2" />
               Overview
             </button>
             <button
               onClick={() => setActiveTab('users')}
-              className={cn(
-                'pb-3 px-1 text-sm font-medium border-b-2 transition-colors',
-                activeTab === 'users'
-                  ? 'border-primary-500 text-primary-400'
-                  : 'border-transparent text-secondary-400 hover:text-secondary-200'
-              )}
+              className={tabClass('users')}
             >
               <Users className="inline h-4 w-4 mr-2" />
               Users
             </button>
             <button
               onClick={() => setActiveTab('news')}
-              className={cn(
-                'pb-3 px-1 text-sm font-medium border-b-2 transition-colors',
-                activeTab === 'news'
-                  ? 'border-primary-500 text-primary-400'
-                  : 'border-transparent text-secondary-400 hover:text-secondary-200'
-              )}
+              className={tabClass('news')}
             >
               <Newspaper className="inline h-4 w-4 mr-2" />
               News

@@ -12,7 +12,6 @@ import type { DatabaseConnection, TableInfo, ConnectionTestResponse, SyncRespons
 // Query keys
 const CONNECTORS_KEY = 'connectors'
 const CONNECTOR_KEY = 'connector'
-const SCHEMA_KEY = 'schema'
 
 // =============================================================================
 // LIST CONNECTORS
@@ -158,14 +157,6 @@ export function useTestNewConnection() {
 // =============================================================================
 // DISCOVER SCHEMA
 // =============================================================================
-
-export function useDiscoverSchema(connectionId: string | undefined) {
-  return useQuery<TableInfo[]>({
-    queryKey: [SCHEMA_KEY, connectionId],
-    queryFn: () => connectorsApi.discoverSchema(connectionId!),
-    enabled: false, // Only fetch when explicitly triggered
-  })
-}
 
 export function useDiscoverSchemaMutation() {
   return useMutation<TableInfo[], Error, string>({

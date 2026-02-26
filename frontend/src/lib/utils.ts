@@ -22,7 +22,8 @@ export function formatFileSize(bytes: number): string {
 /**
  * Format date to local string
  */
-export function formatDate(dateString: string): string {
+export function formatDate(dateString: string | null): string {
+  if (!dateString) return ''
   const date = new Date(dateString)
   return date.toLocaleDateString('th-TH', {
     year: 'numeric',
@@ -30,6 +31,16 @@ export function formatDate(dateString: string): string {
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+  })
+}
+
+export function formatDateShort(dateString: string | null): string {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  return date.toLocaleDateString('th-TH', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
   })
 }
 

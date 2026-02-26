@@ -8,8 +8,8 @@
 // STATUS TYPES
 // =============================================================================
 
-export type ProcessingStatus = 'pending' | 'processing' | 'completed' | 'failed'
-export type SyncStatus = 'completed' | 'syncing' | 'pending' | 'failed' | null
+type ProcessingStatus = 'pending' | 'processing' | 'completed' | 'failed'
+import type { SyncStatus } from '@/types'
 export type UserStatus = 'active' | 'inactive'
 export type UserRole = 'admin' | 'editor' | 'user'
 

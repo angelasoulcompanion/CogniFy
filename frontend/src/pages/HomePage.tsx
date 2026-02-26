@@ -6,13 +6,15 @@
 
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { cn } from '@/lib/utils'
+import { cn, formatDate, formatDateShort } from '@/lib/utils'
+import { CATEGORY_CONFIG } from '@/lib/announcementConfig'
+import { Modal } from '@/components/ui/Modal'
 import {
   useAnnouncements,
   usePinnedAnnouncements,
 } from '@/hooks/useAnnouncements'
 import { useAuth } from '@/hooks/useAuth'
-import type { Announcement, AnnouncementCategory } from '@/types'
+import type { Announcement } from '@/types'
 import ReactMarkdown from 'react-markdown'
 import {
   Home,
@@ -24,49 +26,9 @@ import {
   Database,
   ChevronRight,
   Calendar,
-  AlertCircle,
   Bell,
-  RefreshCw,
-  PartyPopper,
-  Info,
   X,
 } from 'lucide-react'
-
-// =============================================================================
-// CATEGORY CONFIG
-// =============================================================================
-
-const CATEGORY_CONFIG: Record<AnnouncementCategory, {
-  icon: React.ElementType
-  color: string
-  bgColor: string
-  label: string
-}> = {
-  general: {
-    icon: Info,
-    color: 'text-blue-400',
-    bgColor: 'bg-blue-500/10',
-    label: 'General',
-  },
-  important: {
-    icon: AlertCircle,
-    color: 'text-red-400',
-    bgColor: 'bg-red-500/10',
-    label: 'Important',
-  },
-  update: {
-    icon: RefreshCw,
-    color: 'text-green-400',
-    bgColor: 'bg-green-500/10',
-    label: 'Update',
-  },
-  event: {
-    icon: PartyPopper,
-    color: 'text-yellow-400',
-    bgColor: 'bg-yellow-500/10',
-    label: 'Event',
-  },
-}
 
 // =============================================================================
 // ANNOUNCEMENT CARD
@@ -84,20 +46,7 @@ function AnnouncementCard({
   const config = CATEGORY_CONFIG[announcement.category]
   const CategoryIcon = config.icon
 
-  // Format date
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return ''
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('th-TH', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
-  }
-
-  // Get preview text from markdown (first 150 chars)
   const getPreview = (content: string) => {
-    // Remove markdown syntax for preview
     const plainText = content
       .replace(/#{1,6}\s/g, '')
       .replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1')
@@ -119,7 +68,6 @@ function AnnouncementCard({
           : 'bg-secondary-800/50 border-secondary-700/50'
       )}
     >
-      {/* Cover Image */}
       {announcement.cover_image_url && (
         <div className="relative h-32 w-full overflow-hidden rounded-t-xl">
           <img
@@ -137,7 +85,6 @@ function AnnouncementCard({
       )}
 
       <div className="p-4">
-        {/* Header */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2">
             <span className={cn('rounded-full p-1.5', config.bgColor)}>
@@ -152,21 +99,18 @@ function AnnouncementCard({
           )}
         </div>
 
-        {/* Title */}
         <h3 className="mt-3 font-semibold text-white line-clamp-2">
           {announcement.title}
         </h3>
 
-        {/* Preview */}
         <p className="mt-2 text-sm text-secondary-400 line-clamp-2">
           {getPreview(announcement.content)}
         </p>
 
-        {/* Footer */}
         <div className="mt-3 flex items-center gap-3 text-xs text-secondary-500">
           <span className="flex items-center gap-1">
             <Calendar className="h-3 w-3" />
-            {formatDate(announcement.published_at)}
+            {formatDateShort(announcement.published_at)}
           </span>
         </div>
       </div>
@@ -188,73 +132,49 @@ function AnnouncementModal({
   const config = CATEGORY_CONFIG[announcement.category]
   const CategoryIcon = config.icon
 
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return ''
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('th-TH', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* Modal */}
-      <div className="relative z-10 max-h-[85vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-secondary-800 border border-secondary-700 shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-secondary-700 p-4">
-          <div className="flex items-center gap-3">
-            <span className={cn('rounded-full p-2', config.bgColor)}>
-              <CategoryIcon className={cn('h-5 w-5', config.color)} />
+    <Modal isOpen onClose={onClose} size="lg">
+      <div className="flex items-center justify-between border-b border-secondary-700 p-4">
+        <div className="flex items-center gap-3">
+          <span className={cn('rounded-full p-2', config.bgColor)}>
+            <CategoryIcon className={cn('h-5 w-5', config.color)} />
+          </span>
+          <div>
+            <span className={cn('text-sm font-medium', config.color)}>
+              {config.label}
             </span>
-            <div>
-              <span className={cn('text-sm font-medium', config.color)}>
-                {config.label}
-              </span>
-              <p className="text-xs text-secondary-500">
-                {formatDate(announcement.published_at)}
-              </p>
-            </div>
+            <p className="text-xs text-secondary-500">
+              {formatDate(announcement.published_at)}
+            </p>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg p-2 text-secondary-400 hover:bg-secondary-700 hover:text-white transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
         </div>
+        <button
+          onClick={onClose}
+          className="rounded-lg p-2 text-secondary-400 hover:bg-secondary-700 hover:text-white transition-colors"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
 
-        {/* Cover Image */}
-        {announcement.cover_image_url && (
-          <div className="w-full h-48 overflow-hidden">
-            <img
-              src={announcement.cover_image_url}
-              alt={announcement.title}
-              className="h-full w-full object-cover"
-            />
-          </div>
-        )}
+      {announcement.cover_image_url && (
+        <div className="w-full h-48 overflow-hidden">
+          <img
+            src={announcement.cover_image_url}
+            alt={announcement.title}
+            className="h-full w-full object-cover"
+          />
+        </div>
+      )}
 
-        {/* Content */}
-        <div className="max-h-[50vh] overflow-y-auto p-6">
-          <h2 className="text-xl font-bold text-white mb-4">
-            {announcement.title}
-          </h2>
-          <div className="prose prose-invert prose-sm max-w-none">
-            <ReactMarkdown>{announcement.content}</ReactMarkdown>
-          </div>
+      <div className="max-h-[50vh] overflow-y-auto p-6">
+        <h2 className="text-xl font-bold text-white mb-4">
+          {announcement.title}
+        </h2>
+        <div className="prose prose-invert prose-sm max-w-none">
+          <ReactMarkdown>{announcement.content}</ReactMarkdown>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -308,17 +228,14 @@ export default function HomePage() {
   const { user } = useAuth()
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null)
 
-  // Fetch data
   const { data: pinnedData } = usePinnedAnnouncements(3)
   const { data: recentData, isLoading: recentLoading } = useAnnouncements({ limit: 6 })
 
-  // Get recent announcements (exclude pinned ones)
   const pinnedIds = new Set(pinnedData?.map(a => a.announcement_id) || [])
   const recentAnnouncements = recentData?.announcements.filter(
     a => !pinnedIds.has(a.announcement_id)
   ).slice(0, 4) || []
 
-  // Get greeting based on time
   const getGreeting = () => {
     const hour = new Date().getHours()
     if (hour < 12) return 'Good Morning'

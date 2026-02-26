@@ -28,15 +28,6 @@ export interface LoginResponse {
   user: User;
 }
 
-export interface AuthState {
-  user: User | null;
-  token: string | null;
-  isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
-  setUser: (user: User) => void;
-}
-
 // =============================================================================
 // DOCUMENT TYPES
 // =============================================================================
@@ -158,7 +149,7 @@ export interface AppState {
 // =============================================================================
 
 export type DatabaseType = 'postgresql' | 'mysql' | 'sqlserver';
-export type SyncStatus = 'pending' | 'syncing' | 'completed' | 'failed';
+export type SyncStatus = 'pending' | 'syncing' | 'completed' | 'failed' | null;
 
 export interface DatabaseConnection {
   connection_id: string;

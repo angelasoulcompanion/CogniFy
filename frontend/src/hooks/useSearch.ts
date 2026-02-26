@@ -19,7 +19,7 @@ import type {
 // DEFAULT CONFIG
 // =============================================================================
 
-const DEFAULT_CONFIG: SearchConfig = {
+export const DEFAULT_CONFIG: SearchConfig = {
   embeddingModel: 'bge-m3',
   searchType: 'hybrid',
   similarityMethod: 'cosine',

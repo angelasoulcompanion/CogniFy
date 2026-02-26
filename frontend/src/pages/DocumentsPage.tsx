@@ -27,6 +27,10 @@ import {
   AlertCircle,
   CheckCircle2,
 } from 'lucide-react'
+import { Button } from '@/components/ui/Button'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { EmptyState as SharedEmptyState } from '@/components/ui/EmptyState'
+import { DropdownMenu, DropdownItem } from '@/components/ui/DropdownMenu'
 
 export function DocumentsPage() {
   const [searchQuery, setSearchQuery] = useState('')
@@ -142,44 +146,32 @@ export function DocumentsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <header className="flex h-16 items-center justify-between border-b border-primary-500/10 bg-secondary-900/50 backdrop-blur-sm px-6">
-        <div>
-          <h1 className="text-xl font-semibold text-white">Documents</h1>
-          <p className="text-sm text-secondary-400">
-            {activeDocuments?.length || 0} document{activeDocuments?.length !== 1 ? 's' : ''} uploaded
-            {hasProcessingDocs && (
-              <span className="ml-2 inline-flex items-center gap-1 text-primary-400">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Processing...
-              </span>
-            )}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => refetch()}
-            className="flex items-center gap-2 rounded-xl border border-secondary-700 px-3 py-2 text-sm text-secondary-300 hover:bg-secondary-800 transition-colors"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </button>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-primary-600 to-violet-600 px-4 py-2 text-sm font-medium text-white hover:from-primary-500 hover:to-violet-500 transition-all shadow-lg shadow-primary-500/25"
-          >
-            <Upload className="h-4 w-4" />
-            Upload
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            onChange={handleFileSelect}
-            accept=".pdf,.docx,.doc,.txt,.xlsx,.xls"
-            className="hidden"
-          />
-        </div>
-      </header>
+      <PageHeader
+        title="Documents"
+        subtitle={<>
+          {activeDocuments?.length || 0} document{activeDocuments?.length !== 1 ? 's' : ''} uploaded
+          {hasProcessingDocs && (
+            <span className="ml-2 inline-flex items-center gap-1 text-primary-400">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Processing...
+            </span>
+          )}
+        </>}
+      >
+        <Button variant="secondary" onClick={() => refetch()} icon={<RefreshCw className="h-4 w-4" />}>
+          Refresh
+        </Button>
+        <Button onClick={() => fileInputRef.current?.click()} icon={<Upload className="h-4 w-4" />}>
+          Upload
+        </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          onChange={handleFileSelect}
+          accept=".pdf,.docx,.doc,.txt,.xlsx,.xls"
+          className="hidden"
+        />
+      </PageHeader>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
@@ -282,7 +274,6 @@ function DocumentCard({
   onDelete: () => void
   isDeleting: boolean
 }) {
-  const [showMenu, setShowMenu] = useState(false)
   const isProcessing = document.processing_status === 'processing' || document.processing_status === 'pending'
   const isCompleted = document.processing_status === 'completed'
 
@@ -342,41 +333,16 @@ function DocumentCard({
           )}
         </div>
 
-        {/* Actions */}
-        <div className="relative">
-          <button
-            onClick={() => setShowMenu(!showMenu)}
-            className="rounded-lg p-2 text-secondary-400 hover:bg-secondary-700 hover:text-white"
+        <DropdownMenu trigger={<MoreVertical className="h-5 w-5" />} width="w-48">
+          <DropdownItem
+            onClick={onDelete}
+            disabled={isDeleting}
+            variant="danger"
+            icon={isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
           >
-            <MoreVertical className="h-5 w-5" />
-          </button>
-
-          {showMenu && (
-            <>
-              <div
-                className="fixed inset-0 z-10"
-                onClick={() => setShowMenu(false)}
-              />
-              <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-lg border border-secondary-700 bg-secondary-800 py-1 shadow-lg">
-                <button
-                  onClick={() => {
-                    setShowMenu(false)
-                    onDelete()
-                  }}
-                  disabled={isDeleting}
-                  className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/20 disabled:opacity-50"
-                >
-                  {isDeleting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4" />
-                  )}
-                  Delete
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+            Delete
+          </DropdownItem>
+        </DropdownMenu>
       </div>
 
       {/* Processing Progress Bar */}
@@ -471,18 +437,12 @@ function ProcessingProgressBar({
 
 function EmptyState({ hasDocuments }: { hasDocuments: boolean }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-secondary-800">
-        <FolderOpen className="h-8 w-8 text-secondary-500" />
-      </div>
-      <h3 className="mt-4 text-lg font-medium text-white">
-        {hasDocuments ? 'No documents found' : 'No documents yet'}
-      </h3>
-      <p className="mt-2 text-sm text-secondary-400 max-w-sm">
-        {hasDocuments
-          ? 'Try adjusting your search query'
-          : 'Upload your first document to get started with CogniFy'}
-      </p>
-    </div>
+    <SharedEmptyState
+      icon={<FolderOpen className="h-8 w-8 text-secondary-500" />}
+      title={hasDocuments ? 'No documents found' : 'No documents yet'}
+      description={hasDocuments
+        ? 'Try adjusting your search query'
+        : 'Upload your first document to get started with CogniFy'}
+    />
   )
 }

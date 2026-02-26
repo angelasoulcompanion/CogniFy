@@ -13,11 +13,11 @@ import {
 
 describe('formatBytes', () => {
   it('should format 0 bytes', () => {
-    expect(formatBytes(0)).toBe('0 B')
+    expect(formatBytes(0)).toBe('0 Bytes')
   })
 
   it('should format bytes correctly', () => {
-    expect(formatBytes(500)).toBe('500 B')
+    expect(formatBytes(500)).toBe('500 Bytes')
   })
 
   it('should format kilobytes correctly', () => {

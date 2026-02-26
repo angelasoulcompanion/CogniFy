@@ -20,13 +20,18 @@ import {
 import { formatRelativeTime } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import type { DatabaseConnection, DatabaseType, TableInfo } from '@/types'
+import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
+import { Input } from '@/components/ui/Input'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { DropdownMenu, DropdownItem } from '@/components/ui/DropdownMenu'
 import {
   Database,
   Plus,
   RefreshCw,
   Trash2,
   Eye,
-  X,
   Loader2,
   Server,
   Table,
@@ -46,31 +51,17 @@ export function ConnectorsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <header className="flex h-16 items-center justify-between border-b border-primary-500/10 bg-secondary-900/50 backdrop-blur-sm px-6">
-        <div>
-          <h1 className="text-xl font-semibold text-white">Database Connectors</h1>
-          <p className="text-sm text-secondary-400">
-            {connections?.length || 0} connection{connections?.length !== 1 ? 's' : ''} configured
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => refetch()}
-            className="flex items-center gap-2 rounded-xl border border-secondary-700 px-3 py-2 text-sm text-secondary-300 hover:bg-secondary-800 transition-colors"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </button>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-primary-600 to-violet-600 px-4 py-2 text-sm font-medium text-white hover:from-primary-500 hover:to-violet-500 transition-all shadow-lg shadow-primary-500/25"
-          >
-            <Plus className="h-4 w-4" />
-            Add Connection
-          </button>
-        </div>
-      </header>
+      <PageHeader
+        title="Database Connectors"
+        subtitle={`${connections?.length || 0} connection${connections?.length !== 1 ? 's' : ''} configured`}
+      >
+        <Button variant="secondary" onClick={() => refetch()} icon={<RefreshCw className="h-4 w-4" />}>
+          Refresh
+        </Button>
+        <Button onClick={() => setShowCreateModal(true)} icon={<Plus className="h-4 w-4" />}>
+          Add Connection
+        </Button>
+      </PageHeader>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
@@ -96,7 +87,16 @@ export function ConnectorsPage() {
               <Loader2 className="h-8 w-8 animate-spin text-secondary-400" />
             </div>
           ) : connections?.length === 0 ? (
-            <EmptyState onAdd={() => setShowCreateModal(true)} />
+            <EmptyState
+              icon={<Database className="h-8 w-8 text-secondary-500" />}
+              title="No database connections yet"
+              description="Connect to external databases and sync their data for RAG-powered search."
+              action={
+                <Button onClick={() => setShowCreateModal(true)} icon={<Plus className="h-4 w-4" />}>
+                  Add Connection
+                </Button>
+              }
+            />
           ) : (
             <div className="space-y-4">
               {connections?.map((connection) => (
@@ -144,7 +144,6 @@ function ConnectionCard({
   connection: DatabaseConnection
   onViewSchema: () => void
 }) {
-  const [showMenu, setShowMenu] = useState(false)
   const deleteMutation = useDeleteConnector()
   const testMutation = useTestConnection()
   const syncMutation = useSyncConnection()
@@ -247,36 +246,16 @@ function ConnectionCard({
               )}
             </button>
 
-            {/* More Menu */}
-            <div className="relative">
-              <button
-                onClick={() => setShowMenu(!showMenu)}
-                className="rounded-lg p-2 text-secondary-400 hover:bg-secondary-700 hover:text-white"
+            <DropdownMenu trigger={<MoreVertical className="h-4 w-4" />}>
+              <DropdownItem
+                onClick={handleDelete}
+                disabled={deleteMutation.isPending}
+                variant="danger"
+                icon={<Trash2 className="h-4 w-4" />}
               >
-                <MoreVertical className="h-4 w-4" />
-              </button>
-              {showMenu && (
-                <>
-                  <div
-                    className="fixed inset-0 z-10"
-                    onClick={() => setShowMenu(false)}
-                  />
-                  <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-secondary-700 bg-secondary-800 py-1 shadow-lg">
-                    <button
-                      onClick={() => {
-                        setShowMenu(false)
-                        handleDelete()
-                      }}
-                      disabled={deleteMutation.isPending}
-                      className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/20"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+                Delete
+              </DropdownItem>
+            </DropdownMenu>
           </div>
         </div>
       </div>
@@ -330,31 +309,20 @@ function CreateConnectionModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-      <div className="w-full max-w-lg rounded-xl bg-secondary-900 border border-secondary-700 p-6 shadow-xl">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-white">Add Database Connection</h2>
-          <button
-            onClick={onClose}
-            className="rounded-lg p-2 hover:bg-secondary-800"
-          >
-            <X className="h-5 w-5 text-secondary-400" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
+    <Modal isOpen onClose={onClose}>
+      <Modal.Header title="Add Database Connection" />
+      <Modal.Content>
+        <form id="create-connection-form" onSubmit={handleSubmit} className="space-y-4">
           {/* Name */}
           <div>
             <label className="block text-sm font-medium text-secondary-300 mb-1">
               Connection Name
             </label>
-            <input
-              type="text"
+            <Input
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               placeholder="My Database"
               required
-              className="w-full rounded-lg border border-secondary-700 bg-secondary-800 px-4 py-2.5 text-white placeholder-secondary-500 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
             />
           </div>
 
@@ -389,24 +357,21 @@ function CreateConnectionModal({ onClose }: { onClose: () => void }) {
               <label className="block text-sm font-medium text-secondary-300 mb-1">
                 Host
               </label>
-              <input
-                type="text"
+              <Input
                 value={formData.host}
                 onChange={(e) => setFormData({ ...formData, host: e.target.value })}
                 required
-                className="w-full rounded-lg border border-secondary-700 bg-secondary-800 px-4 py-2.5 text-white focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-secondary-300 mb-1">
                 Port
               </label>
-              <input
+              <Input
                 type="number"
                 value={formData.port}
                 onChange={(e) => setFormData({ ...formData, port: parseInt(e.target.value) })}
                 required
-                className="w-full rounded-lg border border-secondary-700 bg-secondary-800 px-4 py-2.5 text-white focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
               />
             </div>
           </div>
@@ -416,12 +381,10 @@ function CreateConnectionModal({ onClose }: { onClose: () => void }) {
             <label className="block text-sm font-medium text-secondary-300 mb-1">
               Database Name
             </label>
-            <input
-              type="text"
+            <Input
               value={formData.database_name}
               onChange={(e) => setFormData({ ...formData, database_name: e.target.value })}
               required
-              className="w-full rounded-lg border border-secondary-700 bg-secondary-800 px-4 py-2.5 text-white focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
             />
           </div>
 
@@ -431,64 +394,50 @@ function CreateConnectionModal({ onClose }: { onClose: () => void }) {
               <label className="block text-sm font-medium text-secondary-300 mb-1">
                 Username
               </label>
-              <input
-                type="text"
+              <Input
                 value={formData.username}
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                 required
-                className="w-full rounded-lg border border-secondary-700 bg-secondary-800 px-4 py-2.5 text-white focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-secondary-300 mb-1">
                 Password
               </label>
-              <input
+              <Input
                 type="password"
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 required
-                className="w-full rounded-lg border border-secondary-700 bg-secondary-800 px-4 py-2.5 text-white focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
               />
             </div>
           </div>
-
-          {/* Actions */}
-          <div className="flex justify-between pt-4">
-            <button
-              type="button"
-              onClick={handleTest}
-              disabled={testMutation.isPending}
-              className="flex items-center gap-2 rounded-lg border border-secondary-700 px-4 py-2 text-sm font-medium text-secondary-300 hover:bg-secondary-800 disabled:opacity-50"
-            >
-              {testMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Zap className="h-4 w-4" />
-              )}
-              Test Connection
-            </button>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-lg border border-secondary-700 px-4 py-2 text-sm font-medium text-secondary-300 hover:bg-secondary-800"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={createMutation.isPending}
-                className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-violet-600 px-4 py-2 text-sm font-medium text-white hover:from-primary-500 hover:to-violet-500 disabled:opacity-50"
-              >
-                {createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                Create Connection
-              </button>
-            </div>
-          </div>
         </form>
-      </div>
-    </div>
+      </Modal.Content>
+      <Modal.Footer align="between">
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={handleTest}
+          isLoading={testMutation.isPending}
+          icon={<Zap className="h-4 w-4" />}
+        >
+          Test Connection
+        </Button>
+        <div className="flex gap-3">
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="create-connection-form"
+            isLoading={createMutation.isPending}
+          >
+            Create Connection
+          </Button>
+        </div>
+      </Modal.Footer>
+    </Modal>
   )
 }
 
@@ -534,191 +483,132 @@ function SchemaModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-      <div className="w-full max-w-3xl max-h-[80vh] rounded-xl bg-secondary-900 border border-secondary-700 shadow-xl flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-secondary-700">
-          <div>
-            <h2 className="text-xl font-semibold text-white">
-              {connection.name} - Schema
-            </h2>
-            <p className="text-sm text-secondary-400 mt-1">
-              {connection.host}:{connection.port}/{connection.database_name}
-            </p>
+    <Modal isOpen onClose={onClose} size="lg">
+      <Modal.Header
+        title={`${connection.name} - Schema`}
+        subtitle={`${connection.host}:${connection.port}/${connection.database_name}`}
+      />
+      <Modal.Content scrollable maxHeight="max-h-[50vh]">
+        {tables.length === 0 ? (
+          <div className="text-center py-12">
+            <Table className="h-12 w-12 text-secondary-600 mx-auto mb-4" />
+            <p className="text-secondary-400 mb-4">Click "Discover Schema" to load tables</p>
+            <Button
+              onClick={handleDiscover}
+              isLoading={schemaMutation.isPending}
+              icon={<Server className="h-4 w-4" />}
+            >
+              Discover Schema
+            </Button>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg p-2 hover:bg-secondary-800"
-          >
-            <X className="h-5 w-5 text-secondary-400" />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {tables.length === 0 ? (
-            <div className="text-center py-12">
-              <Table className="h-12 w-12 text-secondary-600 mx-auto mb-4" />
-              <p className="text-secondary-400 mb-4">Click "Discover Schema" to load tables</p>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm text-secondary-400">
+                {tables.length} tables found. Select tables to sync.
+              </p>
               <button
-                onClick={handleDiscover}
-                disabled={schemaMutation.isPending}
-                className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-violet-600 px-4 py-2 text-sm font-medium text-white hover:from-primary-500 hover:to-violet-500 disabled:opacity-50"
+                onClick={() => {
+                  if (selectedTables.length === tables.length) {
+                    setSelectedTables([])
+                  } else {
+                    setSelectedTables(tables.map(t => t.table_name))
+                  }
+                }}
+                className="text-sm text-primary-400 hover:text-primary-300"
               >
-                {schemaMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Server className="h-4 w-4" />
-                )}
-                Discover Schema
+                {selectedTables.length === tables.length ? 'Deselect All' : 'Select All'}
               </button>
             </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-sm text-secondary-400">
-                  {tables.length} tables found. Select tables to sync.
-                </p>
-                <button
-                  onClick={() => {
-                    if (selectedTables.length === tables.length) {
-                      setSelectedTables([])
-                    } else {
-                      setSelectedTables(tables.map(t => t.table_name))
-                    }
-                  }}
-                  className="text-sm text-primary-400 hover:text-primary-300"
-                >
-                  {selectedTables.length === tables.length ? 'Deselect All' : 'Select All'}
-                </button>
-              </div>
 
-              {tables.map((table) => (
+            {tables.map((table) => (
+              <div
+                key={table.table_name}
+                className="border border-secondary-700 rounded-lg overflow-hidden"
+              >
                 <div
-                  key={table.table_name}
-                  className="border border-secondary-700 rounded-lg overflow-hidden"
+                  className="flex items-center justify-between p-3 bg-secondary-800 cursor-pointer hover:bg-secondary-700"
+                  onClick={() => setExpandedTable(
+                    expandedTable === table.table_name ? null : table.table_name
+                  )}
                 >
-                  <div
-                    className="flex items-center justify-between p-3 bg-secondary-800 cursor-pointer hover:bg-secondary-700"
-                    onClick={() => setExpandedTable(
-                      expandedTable === table.table_name ? null : table.table_name
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={selectedTables.includes(table.table_name)}
-                        onChange={() => toggleTable(table.table_name)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="rounded border-secondary-600 bg-secondary-700 text-primary-500 focus:ring-primary-500"
-                      />
-                      <Table className="h-4 w-4 text-secondary-400" />
-                      <span className="font-medium text-white">{table.table_name}</span>
-                      <span className="text-sm text-secondary-400">
-                        ({table.column_count} columns
-                        {table.row_count !== null && `, ~${table.row_count.toLocaleString()} rows`})
-                      </span>
-                    </div>
-                    {expandedTable === table.table_name ? (
-                      <ChevronDown className="h-4 w-4 text-secondary-400" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 text-secondary-400" />
-                    )}
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedTables.includes(table.table_name)}
+                      onChange={() => toggleTable(table.table_name)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="rounded border-secondary-600 bg-secondary-700 text-primary-500 focus:ring-primary-500"
+                    />
+                    <Table className="h-4 w-4 text-secondary-400" />
+                    <span className="font-medium text-white">{table.table_name}</span>
+                    <span className="text-sm text-secondary-400">
+                      ({table.column_count} columns
+                      {table.row_count !== null && `, ~${table.row_count.toLocaleString()} rows`})
+                    </span>
                   </div>
-
-                  {expandedTable === table.table_name && table.columns.length > 0 && (
-                    <div className="p-3 border-t border-secondary-700 bg-secondary-800/50">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-left text-secondary-500">
-                            <th className="pb-2">Column</th>
-                            <th className="pb-2">Type</th>
-                            <th className="pb-2">Nullable</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {table.columns.map((col) => (
-                            <tr key={col.column_name} className="border-t border-secondary-700">
-                              <td className="py-1.5 text-white">
-                                {col.column_name}
-                                {table.primary_key === col.column_name && (
-                                  <span className="ml-2 text-xs text-primary-400">PK</span>
-                                )}
-                              </td>
-                              <td className="py-1.5 text-secondary-400">{col.data_type}</td>
-                              <td className="py-1.5 text-secondary-400">
-                                {col.is_nullable === 'YES' ? 'Yes' : 'No'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                  {expandedTable === table.table_name ? (
+                    <ChevronDown className="h-4 w-4 text-secondary-400" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-secondary-400" />
                   )}
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
 
-        {/* Footer */}
-        {tables.length > 0 && (
-          <div className="flex items-center justify-between p-6 border-t border-secondary-700">
-            <p className="text-sm text-secondary-400">
-              {selectedTables.length > 0
-                ? `${selectedTables.length} table(s) selected`
-                : 'All tables will be synced'}
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={onClose}
-                className="rounded-lg border border-secondary-700 px-4 py-2 text-sm font-medium text-secondary-300 hover:bg-secondary-800"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSync}
-                disabled={syncMutation.isPending}
-                className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-violet-600 px-4 py-2 text-sm font-medium text-white hover:from-primary-500 hover:to-violet-500 disabled:opacity-50"
-              >
-                {syncMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
+                {expandedTable === table.table_name && table.columns.length > 0 && (
+                  <div className="p-3 border-t border-secondary-700 bg-secondary-800/50">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-secondary-500">
+                          <th className="pb-2">Column</th>
+                          <th className="pb-2">Type</th>
+                          <th className="pb-2">Nullable</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {table.columns.map((col) => (
+                          <tr key={col.column_name} className="border-t border-secondary-700">
+                            <td className="py-1.5 text-white">
+                              {col.column_name}
+                              {table.primary_key === col.column_name && (
+                                <span className="ml-2 text-xs text-primary-400">PK</span>
+                              )}
+                            </td>
+                            <td className="py-1.5 text-secondary-400">{col.data_type}</td>
+                            <td className="py-1.5 text-secondary-400">
+                              {col.is_nullable === 'YES' ? 'Yes' : 'No'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
-                Sync to RAG
-              </button>
-            </div>
+              </div>
+            ))}
           </div>
         )}
-      </div>
-    </div>
-  )
-}
-
-// =============================================================================
-// EMPTY STATE COMPONENT
-// =============================================================================
-
-function EmptyState({ onAdd }: { onAdd: () => void }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-secondary-800">
-        <Database className="h-8 w-8 text-secondary-500" />
-      </div>
-      <h3 className="mt-4 text-lg font-medium text-white">
-        No database connections yet
-      </h3>
-      <p className="mt-2 text-sm text-secondary-400 max-w-sm">
-        Connect to external databases and sync their data for RAG-powered search.
-      </p>
-      <button
-        onClick={onAdd}
-        className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-primary-600 to-violet-600 px-4 py-2 text-sm font-medium text-white hover:from-primary-500 hover:to-violet-500 shadow-lg shadow-primary-500/25"
-      >
-        <Plus className="h-4 w-4" />
-        Add Connection
-      </button>
-    </div>
+      </Modal.Content>
+      {tables.length > 0 && (
+        <Modal.Footer align="between">
+          <p className="text-sm text-secondary-400">
+            {selectedTables.length > 0
+              ? `${selectedTables.length} table(s) selected`
+              : 'All tables will be synced'}
+          </p>
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSync}
+              isLoading={syncMutation.isPending}
+              icon={<RefreshCw className="h-4 w-4" />}
+            >
+              Sync to RAG
+            </Button>
+          </div>
+        </Modal.Footer>
+      )}
+    </Modal>
   )
 }

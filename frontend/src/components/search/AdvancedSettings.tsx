@@ -7,15 +7,7 @@
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { ChevronDown, RotateCcw } from 'lucide-react'
-import { useSearchStore } from '@/hooks/useSearch'
-
-const DEFAULT_CONFIG = {
-  threshold: 0.3,
-  maxResults: 10,
-  bm25Weight: 0.4,
-  vectorWeight: 0.6,
-  rrfK: 60,
-}
+import { useSearchStore, DEFAULT_CONFIG } from '@/hooks/useSearch'
 
 export function AdvancedSettings() {
   const [isOpen, setIsOpen] = useState(false)
