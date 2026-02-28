@@ -104,7 +104,9 @@ api.interceptors.request.use(
       return config
     }
 
-    let { accessToken, expiry } = getTokens()
+    const tokens = getTokens()
+    let accessToken = tokens.accessToken
+    const expiry = tokens.expiry
 
     // If token exists and is about to expire, try to refresh proactively
     if (accessToken && isTokenExpired(expiry)) {

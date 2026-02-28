@@ -128,6 +128,7 @@ export function StructuredResponseRenderer({ data, className = '' }: StructuredR
 }
 
 // Helper to check if content is structured JSON
+// eslint-disable-next-line react-refresh/only-export-components
 export function isStructuredResponse(content: string): StructuredResponse | null {
   try {
     const data = JSON.parse(content)

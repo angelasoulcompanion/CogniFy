@@ -27,7 +27,7 @@ describe('getDocumentStatusLabel', () => {
   })
 
   it('should return unknown for unknown status', () => {
-    expect(getDocumentStatusLabel('unknown' as any)).toBe('unknown')
+    expect(getDocumentStatusLabel('unknown' as never)).toBe('unknown')
   })
 })
 
@@ -53,7 +53,7 @@ describe('getDocumentStatusColor', () => {
   })
 
   it('should return gray for unknown status', () => {
-    const result = getDocumentStatusColor('unknown' as any)
+    const result = getDocumentStatusColor('unknown' as never)
     expect(result).toContain('gray')
   })
 })

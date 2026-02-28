@@ -6,8 +6,14 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { connectorsApi } from '@/services/api'
+import { AxiosError } from 'axios'
 import toast from 'react-hot-toast'
 import type { DatabaseConnection, TableInfo, ConnectionTestResponse, SyncResponse } from '@/types'
+
+function getErrorMessage(error: Error, fallback: string): string {
+  const axiosError = error as AxiosError<{ detail?: string }>
+  return axiosError.response?.data?.detail || fallback
+}
 
 // Query keys
 const CONNECTORS_KEY = 'connectors'
@@ -58,8 +64,8 @@ export function useCreateConnector() {
       queryClient.invalidateQueries({ queryKey: [CONNECTORS_KEY] })
       toast.success('Connection created successfully')
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to create connection')
+    onError: (error: Error) => {
+      toast.error(getErrorMessage(error, 'Failed to create connection'))
     },
   })
 }
@@ -89,8 +95,8 @@ export function useUpdateConnector() {
       queryClient.invalidateQueries({ queryKey: [CONNECTOR_KEY, connectionId] })
       toast.success('Connection updated')
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to update connection')
+    onError: (error: Error) => {
+      toast.error(getErrorMessage(error, 'Failed to update connection'))
     },
   })
 }
@@ -108,8 +114,8 @@ export function useDeleteConnector() {
       queryClient.invalidateQueries({ queryKey: [CONNECTORS_KEY] })
       toast.success('Connection deleted')
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to delete connection')
+    onError: (error: Error) => {
+      toast.error(getErrorMessage(error, 'Failed to delete connection'))
     },
   })
 }
@@ -128,8 +134,8 @@ export function useTestConnection() {
         toast.error(`Connection failed: ${data.error}`)
       }
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to test connection')
+    onError: (error: Error) => {
+      toast.error(getErrorMessage(error, 'Failed to test connection'))
     },
   })
 }
@@ -161,8 +167,8 @@ export function useTestNewConnection() {
 export function useDiscoverSchemaMutation() {
   return useMutation<TableInfo[], Error, string>({
     mutationFn: (connectionId: string) => connectorsApi.discoverSchema(connectionId),
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to discover schema')
+    onError: (error: Error) => {
+      toast.error(getErrorMessage(error, 'Failed to discover schema'))
     },
   })
 }
@@ -196,8 +202,8 @@ export function useSyncConnection() {
         toast.error(`Sync failed: ${data.error}`)
       }
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to sync connection')
+    onError: (error: Error) => {
+      toast.error(getErrorMessage(error, 'Failed to sync connection'))
     },
   })
 }
@@ -226,8 +232,8 @@ export function useExecuteQuery() {
       connectionId: string;
       query: string;
     }) => connectorsApi.query(connectionId, query),
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Query failed')
+    onError: (error: Error) => {
+      toast.error(getErrorMessage(error, 'Query failed'))
     },
   })
 }

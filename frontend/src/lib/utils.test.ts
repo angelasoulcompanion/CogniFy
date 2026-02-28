@@ -13,7 +13,9 @@ describe('cn utility function', () => {
   })
 
   it('should handle conditional classes', () => {
-    const result = cn('base', true && 'included', false && 'excluded')
+    const isIncluded = true
+    const isExcluded = false
+    const result = cn('base', isIncluded && 'included', isExcluded && 'excluded')
     expect(result).toContain('base')
     expect(result).toContain('included')
     expect(result).not.toContain('excluded')

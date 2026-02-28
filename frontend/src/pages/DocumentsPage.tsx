@@ -36,7 +36,7 @@ export function DocumentsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
-  const [previousStatuses, setPreviousStatuses] = useState<Record<string, string>>({})
+  const previousStatusesRef = useRef<Record<string, string>>({})
 
   // Check if any document is processing to enable auto-polling
   const { data: documents, isLoading, refetch } = useDocuments(20, 0, false)
@@ -58,7 +58,7 @@ export function DocumentsPage() {
     if (!activeDocuments) return
 
     activeDocuments.forEach((doc: Document) => {
-      const prevStatus = previousStatuses[doc.document_id]
+      const prevStatus = previousStatusesRef.current[doc.document_id]
 
       // Notify when status changes from processing/pending to completed
       if (prevStatus &&
@@ -86,7 +86,7 @@ export function DocumentsPage() {
     activeDocuments.forEach((doc: Document) => {
       newStatuses[doc.document_id] = doc.processing_status
     })
-    setPreviousStatuses(newStatuses)
+    previousStatusesRef.current = newStatuses
   }, [activeDocuments])
 
   const uploadMutation = useUploadDocument()

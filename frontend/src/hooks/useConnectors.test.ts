@@ -51,7 +51,7 @@ describe('getDatabaseIcon', () => {
   })
 
   it('should return cabinet emoji for unknown type', () => {
-    expect(getDatabaseIcon('unknown' as any)).toBe('🗄️')
+    expect(getDatabaseIcon('unknown' as never)).toBe('🗄️')
   })
 })
 
@@ -69,6 +69,6 @@ describe('getDefaultPort', () => {
   })
 
   it('should return 5432 as default for unknown type', () => {
-    expect(getDefaultPort('unknown' as any)).toBe(5432)
+    expect(getDefaultPort('unknown' as never)).toBe(5432)
   })
 })
