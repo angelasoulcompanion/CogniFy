@@ -3,9 +3,26 @@ CogniFy Service Container
 Centralized dependency management — replaces module-level singletons
 """
 
-from typing import Optional
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Optional
 
 from app.core.logging import logger
+
+if TYPE_CHECKING:
+    from app.services.admin_service import AdminService
+    from app.services.chat_service import ChatService
+    from app.services.chunking_service import ChunkingService
+    from app.services.connector_service import ConnectorService
+    from app.services.document_service import DocumentService
+    from app.services.embedding_service import EmbeddingService
+    from app.services.hyde_service import HyDEService
+    from app.services.llm_service import LLMService
+    from app.services.ocr_service import OCRService
+    from app.services.prompt_service import PromptService
+    from app.services.rag_service import RAGService
+    from app.services.reranker_service import RerankerService
+    from app.services.token_service import TokenService
 
 
 class ServiceContainer:
