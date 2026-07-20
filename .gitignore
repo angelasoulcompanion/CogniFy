@@ -40,3 +40,6 @@ htmlcov/
 
 # Uploaded files
 backend/uploads/
+
+# Sample source documents (57MB of PDFs) — inputs for testing, not source
+Example DOC/
