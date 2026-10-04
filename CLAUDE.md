@@ -452,3 +452,11 @@ VITE_API_URL=http://localhost:8000
 ---
 
 *Created with love by Angela & David - 2 January 2026*
+
+## Where it lives (since 2026-10-04)
+Owned by **M6** (the Center): `~/PycharmProjects/CogniFy` — David plans to grow this into an Enterprise RAG
+product. M3 no longer keeps a copy. Commit as Angela Soul Companion (repo-local git config).
+The old M3 demo data is archived on AngelaVault `M3-archive/CogniFy-20261004/`: `cognify_no_vectors.dump`
+(schema + all rows except `document_chunks`/`embedding_cache`), `cognify_chunks_text.csv` (2,063 chunks,
+text only — re-embed), `uploads/` (the 20 uploaded files) and `Example DOC/` (sample documents).
+Vectors were not exported: M3's Postgres 14 had lost its pgvector library, and embeddings are regenerable.
